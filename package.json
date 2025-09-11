@@ -1,0 +1,58 @@
+{
+	"name": "just-a-walkthrough",
+	"version": "0.1.0",
+	"description": "Framework-agnostic onboarding walkthrough / product tour library with optional React provider & Tailwind/shadcn support.",
+	"author": {
+		"email": "suvan.gowrishanker.204@gmail.com",
+		"name": "Suvan Gowri Shanker",
+		"url": "https://www.suvangs.tech"
+	},
+	"homepage": "www.suvangs.tech",
+	"repository": {},
+	"keywords": [],
+	"private": false,
+	"type": "module",
+	"main": "dist/react-walkthrough.cjs.js",
+	"module": "dist/react-walkthrough.esm.js",
+	"types": "dist/types/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/types/index.d.ts",
+			"import": "./dist/react-walkthrough.esm.js",
+			"require": "./dist/react-walkthrough.cjs.js"
+		},
+		"./core": {
+			"types": "./dist/types/walkthrough.d.ts",
+			"import": "./dist/react-walkthrough.esm.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"sideEffects": false,
+	"scripts": {
+		"dev": "vite",
+		"build": "npm run clean && npm run build:types && vite build --config vite.lib.config.ts",
+		"build:types": "tsc -p tsconfig.build.json",
+		"clean": "rimraf dist",
+		"preview": "vite preview",
+		"format": "biome check --write",
+		"test": "bunx vitest run",
+		"test:bun": "bun test"
+	},
+	"peerDependencies": {
+		"react": ">=18",
+		"react-dom": ">=18"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.2.4",
+		"@types/react": "^19.0.12",
+		"@types/react-dom": "^19.0.4",
+		"@vitest/ui": "^3.2.4",
+		"jsdom": "^24.0.0",
+		"rimraf": "^5.0.5",
+		"typescript": "~5.8.3",
+		"vite": "^7.1.2",
+		"vitest": "^3.2.4"
+	}
+}
