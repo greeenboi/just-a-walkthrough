@@ -22,7 +22,7 @@
 		"apexcharts": "^4.3.0",
 		"autoprefixer": "^10.4.20",
 		"flatpickr": "^4.6.13",
-		"next": "15.2.3",
+		"next": "15.4.7",
 		"react": "^19.0.0",
 		"react-apexcharts": "^1.7.0",
 		"react-dnd": "^16.0.1",
