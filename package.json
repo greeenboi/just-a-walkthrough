@@ -9,7 +9,7 @@
 	},
 	"repository": {
 		"directory": ".",
-		"url": "https://github.com/greeenboi/just-a-walkthrough"
+		"url": "git+https://github.com/greeenboi/just-a-walkthrough.git"
 	},
 	"keywords": [
 		"walkthrough",
