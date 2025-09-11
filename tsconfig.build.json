@@ -9,5 +9,6 @@
 		"stripInternal": true,
 		"jsx": "react-jsx"
 	},
-	"include": ["src/**/*.{ts,tsx}"]
+	"include": ["src/**/*.ts", "src/**/*.tsx"],
+	"exclude": ["dist", "node_modules", "test", "examples"]
 }

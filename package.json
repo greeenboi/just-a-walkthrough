@@ -7,7 +7,10 @@
 		"name": "Suvan Gowri Shanker",
 		"url": "https://www.suvangs.tech"
 	},
-	"repository": {"directory": ".", "url": "https://github.com/greeenboi/just-a-walkthrough"},
+	"repository": {
+		"directory": ".",
+		"url": "https://github.com/greeenboi/just-a-walkthrough"
+	},
 	"keywords": [
 		"walkthrough",
 		"product-tour",
@@ -23,9 +26,13 @@
 		"ui-tour"
 	],
 	"private": false,
-	"bugs": { "url": "https://github.com/greeenboi/just-a-walkthrough/issues" },
+	"bugs": {
+		"url": "https://github.com/greeenboi/just-a-walkthrough/issues"
+	},
 	"homepage": "https://github.com/greeenboi/just-a-walkthrough#readme",
-	"publishConfig": { "access": "public" },
+	"publishConfig": {
+		"access": "public"
+	},
 	"license": "AGPL-3.0-only",
 	"type": "module",
 	"main": "dist/react-walkthrough.cjs.js",
