@@ -7,7 +7,6 @@
 		"name": "Suvan Gowri Shanker",
 		"url": "https://www.suvangs.tech"
 	},
-	"homepage": "www.suvangs.tech",
 	"repository": {"directory": ".", "url": "https://github.com/greeenboi/just-a-walkthrough"},
 	"keywords": [
 		"walkthrough",
@@ -24,6 +23,9 @@
 		"ui-tour"
 	],
 	"private": false,
+	"bugs": { "url": "https://github.com/greeenboi/just-a-walkthrough/issues" },
+	"homepage": "https://github.com/greeenboi/just-a-walkthrough#readme",
+	"publishConfig": { "access": "public" },
 	"license": "AGPL-3.0-only",
 	"type": "module",
 	"main": "dist/react-walkthrough.cjs.js",
@@ -52,7 +54,8 @@
 		"preview": "vite preview",
 		"format": "biome check --write",
 		"test": "bunx vitest run",
-		"test:bun": "bun test"
+		"test:bun": "bun test",
+		"prepublishOnly": "npm run build && npm test"
 	},
 	"peerDependencies": {
 		"react": ">=18",
