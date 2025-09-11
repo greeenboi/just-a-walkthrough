@@ -146,7 +146,7 @@ export class Walkthrough {
 			scrollIntoView: options.scrollIntoView ?? true,
 			scrollOptions: options.scrollOptions,
 			persistProgress: options.persistProgress ?? false,
-			resume: options.resume ?? (!!options.persistProgress),
+			resume: options.resume ?? !!options.persistProgress,
 			tourId: options.tourId,
 			customTooltip: options.customTooltip,
 			disableFocusTrap: options.disableFocusTrap ?? false,
@@ -254,7 +254,9 @@ export class Walkthrough {
 		);
 		// Fast path: no waiting requested -> single immediate lookup
 		if (waitMs === 0) {
-			return (document.querySelector(step.selector) as HTMLElement | null) || null;
+			return (
+				(document.querySelector(step.selector) as HTMLElement | null) || null
+			);
 		}
 		const deadline = Date.now() + waitMs;
 		const poll = Math.max(1, this.opts.stepPollIntervalMs);
@@ -467,6 +469,7 @@ export class Walkthrough {
 		ring.style.left = `${x}px`;
 		ring.style.width = `${w}px`;
 		ring.style.height = `${h}px`;
+		if (typeof window === "undefined") return; // Defensive check for window
 	}
 
 	private renderTooltip(step: InternalStep) {
@@ -647,6 +650,7 @@ export class Walkthrough {
 		if (!step || !step._el) return;
 		this.positionHighlight(step._el, step.padding ?? 8);
 		this.positionTooltip(step._el, this.overlayParts.tooltip);
+		if (typeof window === "undefined") return; // Defensive check for window
 	}
 
 	private onKey(e: KeyboardEvent) {

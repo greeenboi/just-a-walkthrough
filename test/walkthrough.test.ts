@@ -72,7 +72,9 @@ describe("Walkthrough basic behavior", () => {
 		for (let i = 0; i < 5 && savedIndex !== 1; i++) {
 			const rawSaved = localStorage.getItem("__walkthrough:tour-resume");
 			if (rawSaved) {
-				try { savedIndex = JSON.parse(rawSaved).index; } catch {}
+				try {
+					savedIndex = JSON.parse(rawSaved).index;
+				} catch {}
 			}
 			if (savedIndex !== 1) await new Promise((r) => setTimeout(r, 0));
 		}

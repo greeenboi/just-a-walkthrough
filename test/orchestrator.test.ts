@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	chainAutoMatches,
 	clearTourProgress,
@@ -17,6 +17,19 @@ beforeEach(() => {
 	localStorage.clear();
 	sessionStorage.clear();
 	document.body.innerHTML = "";
+});
+
+afterEach(() => {
+	// Try to gracefully finish/skip any active tours so MutationObservers & listeners detach.
+	// Click any Done or Skip buttons that remain.
+	document.querySelectorAll(".wt-tooltip .wt-nav button").forEach((b) => {
+		const label = b.textContent?.toLowerCase();
+		if (label === "done" || label === "skip") (b as HTMLButtonElement).click();
+	});
+	// Fallback: remove leftover roots (defensive only; primary cleanup above calls finish/skip).
+	document
+		.querySelectorAll(".wt-root")
+		.forEach((n) => n.parentElement?.removeChild(n));
 });
 
 function addTarget(id: string) {
@@ -58,8 +71,8 @@ describe("startAutoMatches", () => {
 			pathname: "/dash",
 			firstOnly: true,
 		});
-			// firstOnly should start the first auto tour again (no oncePerSession flag)
-			expect(firstOnly).toEqual(["auto1"]);
+		// firstOnly should start the first auto tour again (no oncePerSession flag)
+		expect(firstOnly).toEqual(["auto1"]);
 	});
 
 	it("respects condition, oncePerSession and skipIfCompleted", async () => {
@@ -111,6 +124,8 @@ describe("chainAutoMatches", () => {
 		// session flags set
 		expect(sessionStorage.getItem("__wt_session_started:first")).toBe("1");
 		expect(sessionStorage.getItem("__wt_session_started:second")).toBe("1");
+		// Stop the chain so it doesn't keep observers alive.
+		chain?.stop();
 	});
 });
 
