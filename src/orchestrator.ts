@@ -1,5 +1,6 @@
 import type { WalkthroughOptions, WalkthroughStep } from "./walkthrough";
 import { startWalkthrough, WalkthroughChain } from "./walkthrough";
+import { recordDebug } from "./debug";
 
 /** Definition of a tour tied to a route (pathname pattern) or predicate. */
 export interface RegisteredTour {
@@ -27,6 +28,7 @@ export function registerTour(tour: RegisteredTour) {
 	const existingIdx = registry.findIndex((t) => t.id === tour.id);
 	if (existingIdx >= 0) registry.splice(existingIdx, 1, tour);
 	else registry.push(tour);
+	recordDebug("orchestrator", "register", tour.id, { match: tour.match });
 }
 
 export function registerTours(tours: RegisteredTour[]) {
@@ -39,10 +41,13 @@ export function listTours() {
 
 export function clearTours() {
 	registry.splice(0, registry.length);
+	recordDebug("orchestrator", "clear", "all");
 }
 
 export function findMatchingTours(pathname: string) {
-	return registry.filter((t) => matchPath(t.match, pathname));
+	const matches = registry.filter((t) => matchPath(t.match, pathname));
+	recordDebug("orchestrator", "match", pathname, { count: matches.length });
+	return matches;
 }
 
 function matchPath(
@@ -63,7 +68,9 @@ function progressKey(tourId?: string) {
 
 export function isTourCompleted(tourId: string): boolean {
 	try {
-		const raw = localStorage.getItem(progressKey(tourId)!);
+		const key = progressKey(tourId);
+		if (!key) return false;
+		const raw = localStorage.getItem(key);
 		if (!raw) return false;
 		const data = JSON.parse(raw);
 		return !!data?.completed;
@@ -74,7 +81,8 @@ export function isTourCompleted(tourId: string): boolean {
 
 export function clearTourProgress(tourId: string) {
 	try {
-		localStorage.removeItem(progressKey(tourId)!);
+		const key = progressKey(tourId);
+		if (key) localStorage.removeItem(key);
 	} catch {}
 }
 
@@ -112,8 +120,12 @@ export async function startAutoMatches({
 		)
 			continue;
 		if (condition) {
-			if (!(await condition())) continue;
+			if (!(await condition())) {
+				recordDebug("orchestrator", "condition-skip", id);
+				continue;
+			}
 		}
+		recordDebug("orchestrator", "start", id);
 		startWalkthrough(steps, { tourId: id, ...options });
 		sessionStorage.setItem(`__wt_session_started:${id}`, "1");
 		started.push(id);
@@ -152,7 +164,10 @@ export async function chainAutoMatches(
 		}
 		prepared.push(tour);
 	}
-	if (!prepared.length) return { ids: [], chain: null };
+	if (!prepared.length) {
+		recordDebug("orchestrator", "chain-none", pathname);
+		return { ids: [], chain: null };
+	}
 	const sorted = [...prepared].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 	const ids = sorted.map((s) => s.id);
 	// biome-ignore lint/suspicious/useIterableCallbackReturn: bruh
@@ -166,6 +181,7 @@ export async function chainAutoMatches(
 			options: { tourId: t.id, ...t.options },
 		})),
 	);
+	recordDebug("orchestrator", "chain-start", pathname, { ids });
 	chain.start();
 	return { ids, chain };
 }
@@ -174,6 +190,7 @@ export async function chainAutoMatches(
 export function startTourById(id: string) {
 	const t = registry.find((rt) => rt.id === id);
 	if (!t) throw new Error(`Tour '${id}' not registered`);
+	recordDebug("orchestrator", "manual-start", id);
 	return startWalkthrough(t.steps, { tourId: t.id, ...t.options });
 }
 
@@ -182,14 +199,18 @@ export function resetAllTourProgress() {
 	registry.forEach((t) => {
 		if (t.options?.tourId || t.id) clearTourProgress(t.options?.tourId || t.id);
 	});
+	recordDebug("orchestrator", "reset-progress", "all");
 }
 
 /** Dynamically import a module that exports tours (default export or named 'tours'). */
 export async function loadTours(moduleSpecifier: string) {
-	const mod: any = await import(/* @vite-ignore */ moduleSpecifier);
-	const tours = mod.tours || mod.default || mod.toursDefault;
-	if (Array.isArray(tours)) registerTours(tours);
-	return tours;
+	const mod = (await import(/* @vite-ignore */ moduleSpecifier)) as Record<string, unknown>;
+	const maybeTours =
+		(mod as { tours?: unknown }).tours ??
+		(mod as { default?: unknown }).default ??
+		(mod as { toursDefault?: unknown }).toursDefault;
+	if (Array.isArray(maybeTours)) registerTours(maybeTours as RegisteredTour[]);
+	return maybeTours;
 }
 
 // Provide a lightweight global (opt-in) for debugging if desired
