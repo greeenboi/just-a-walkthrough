@@ -19,7 +19,7 @@
  *
  * Not in scope / intentionally omitted:
  *  - Position flipping library dependencies (custom minimal placement logic is used instead).
- *  - Complex animation frameworks (keep animations simple & CSS based so they can be replacedcd externally).
+ *  - Complex animation frameworks (keep animations simple & CSS based so they can be replaced externally).
  *  - Global singleton management (caller decides orchestration patterns).
  *
  * Example:
