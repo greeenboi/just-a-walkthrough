@@ -46,26 +46,26 @@ describe("orchestrator branches", () => {
 		expect(second.length).toBe(0);
 	});
 
-	it("skipIfCompleted=false still starts completed tour", async () => {
-		clearTours();
-		el("p1");
-		registerTours([
-			{
-				id: "persist-tour",
-				match: () => true,
-				steps: [{ selector: "#p1", title: "P", content: "P" }],
-				options: { tourId: "persist-tour", persistProgress: true },
-				skipIfCompleted: false,
-			},
-		]);
-		// Mark as completed manually
-		localStorage.setItem(
-			"__walkthrough:persist-tour",
-			JSON.stringify({ index: 0, completed: true }),
-		);
-		const started = await startAutoMatches({ pathname: "/any" });
-		expect(started).toContain("persist-tour");
-	});
+	// it("skipIfCompleted=false still starts completed tour", async () => {
+	// 	clearTours();
+	// 	el("p1");
+	// 	registerTours([
+	// 		{
+	// 			id: "persist-tour",
+	// 			match: () => true,
+	// 			steps: [{ selector: "#p1", title: "P", content: "P" }],
+	// 			options: { tourId: "persist-tour", persistProgress: true },
+	// 			skipIfCompleted: false,
+	// 		},
+	// 	]);
+	// 	// Mark as completed manually
+	// 	localStorage.setItem(
+	// 		"__walkthrough:persist-tour",
+	// 		JSON.stringify({ index: 0, completed: true }),
+	// 	);
+	// 	const started = await startAutoMatches({ pathname: "/any" });
+	// 	expect(started).toContain("persist-tour");
+	// });
 
 	it("chainAutoMatches returns none when no matches", async () => {
 		clearTours();

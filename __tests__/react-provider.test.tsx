@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { clearTours, registerTours } from "../src/orchestrator";
 import { useWalkthrough, WalkthroughProvider } from "../src/react-provider";
 
@@ -30,9 +30,25 @@ const TestComponent: React.FC = () => {
 			],
 			{ stepWaitMs: 0, stepPollIntervalMs: 0 },
 		);
+		return () => {
+			host.remove();
+		};
 	}, [start]);
 	return null;
 };
+
+// Track the last created React root so we can unmount after each test to avoid
+// React trying to operate on a torn-down JSDOM environment.
+let lastRoot: ReactDOM.Root | null = null;
+
+afterEach(() => {
+	lastRoot?.unmount();
+	lastRoot = null;
+	// Remove any walkthrough roots left if a test exited before finish/skip.
+	document.querySelectorAll(".wt-root").forEach((n) => n.remove());
+	// Also remove any stray host elements (defensive cleanup)
+	document.querySelectorAll("#host-el").forEach((n) => n.remove());
+});
 
 describe("WalkthroughProvider integration", () => {
 	it("starts a walkthrough via context and focuses element", async () => {
@@ -40,8 +56,8 @@ describe("WalkthroughProvider integration", () => {
 		const root = document.createElement("div");
 		document.body.appendChild(root);
 		// Manual lightweight render (avoid bringing full react testing lib)
-		const r = ReactDOM.createRoot(root);
-		r.render(
+		lastRoot = ReactDOM.createRoot(root);
+		lastRoot.render(
 			<WalkthroughProvider>
 				<TestComponent />
 			</WalkthroughProvider>,
@@ -75,8 +91,8 @@ describe("WalkthroughProvider integration", () => {
 		]);
 		const root = document.createElement("div");
 		document.body.appendChild(root);
-		const r = ReactDOM.createRoot(root);
-		r.render(
+		lastRoot = ReactDOM.createRoot(root);
+		lastRoot.render(
 			<WalkthroughProvider>
 				<TestComponent />
 			</WalkthroughProvider>,
