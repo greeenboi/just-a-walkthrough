@@ -231,6 +231,8 @@ const snapshot = dumpWalkthroughDebug(); // programmatic access
 
 Security: by default `printWalkthroughDebug()` prints only aggregate counts (avoids leaking selectors or user data). Pass `{ full: true }` consciously in trusted environments.
 
+HTML Content Sanitization: step `content` strings are sanitized by default (removes `<script>`, `<style>`, `<iframe>` etc., strips event handler attributes like `onclick`, and blocks unsafe URL schemes such as `javascript:`). This mitigates XSS if tour definitions incorporate user‑generated text. If you absolutely trust the source, set `allowUnsafeHTML: true` on an individual step to bypass the sanitizer—but prefer leaving it enabled.
+
 You can also access a console proxy `wtDebug` which is a no-op unless debug is enabled:
 
 ```ts
