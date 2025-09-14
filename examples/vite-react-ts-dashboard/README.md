@@ -237,7 +237,7 @@ A major update with comprehensive redesign and modern React patterns implementat
 
 ### Version 1.3.7 - [June 20, 2024]
 
-#### Enhancements
+#### Enhancements (Historical)
 
 1. Remove Repetition of DefaultLayout in every Pages
 2. Add ClickOutside Component for reduce repeated functionality in Header Message, Notification and User Dropdowns.
