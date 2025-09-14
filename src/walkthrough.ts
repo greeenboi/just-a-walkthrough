@@ -32,7 +32,7 @@
  * ];
  *
  * startWalkthrough(steps, { tourId: 'basic-intro', persistProgress: true });
- yes* ```
+ * ```
  */
 import { recordDebug } from "./debug";
 
