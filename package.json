@@ -62,6 +62,7 @@
 		"format": "biome check --write",
 		"test": "bunx vitest run",
 		"test:bun": "bun test",
+		"changelog": "node scripts/generate-changelog.js generate",
 		"prepublishOnly": "npm run build && npm test"
 	},
 	"peerDependencies": {

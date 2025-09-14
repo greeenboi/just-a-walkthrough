@@ -118,6 +118,10 @@ Completed persistent tours are skipped automatically.
 
 Specify `stepWaitMs: 0` and/or per-step `waitMs: 0` to disable polling for elements (single lookup). `stepPollIntervalMs` is clamped to a minimum of 1ms internally when waiting.
 
+## Changelog
+
+This project maintains an automated changelog based on git commits and package.json versions. See [CHANGELOG.md](./CHANGELOG.md) for release history and [docs/CHANGELOG_GENERATION.md](./docs/CHANGELOG_GENERATION.md) for details on the generation process.
+
 ## Development
 
 ```bash
@@ -125,6 +129,7 @@ npm i
 npm run dev      # playground
 npm test         # vitest (jsdom)
 npm run build    # library build + types
+npm run changelog # generate/update changelog based on commits
 ```
 
 ## Publishing (Maintainers)
@@ -132,6 +137,7 @@ npm run build    # library build + types
 ```bash
 npm run build && npm test
 npm version patch   # or minor / major
+npm run changelog   # update changelog with new version
 git push && git push --tags
 npm publish --access public
 ```
