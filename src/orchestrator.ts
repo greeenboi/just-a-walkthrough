@@ -1,8 +1,27 @@
+/**
+ * Route / predicate based tour registration and auto‑execution utilities.
+ *
+ * This module lets applications declare *tours* (arrays of walkthrough steps) tied to
+ * pathname patterns or arbitrary predicates. At runtime you can:
+ *  - Register tours up‑front or dynamically (code‑splitting friendly)
+ *  - Auto start all (or first) matching tours for the current route
+ *  - Chain multiple matching tours sequentially with persistence-aware skipping
+ *  - Manually start tours by id and reset persisted progress
+ *
+ * Persistence: if a tour uses `persistProgress + tourId` in its options, completion state
+ * is stored in `localStorage` under `__walkthrough:<tourId>`. By default, `skipIfCompleted`
+ * is true so previously completed tours won't auto start again. Session gating is
+ * also supported via `oncePerSession` which uses `sessionStorage` to avoid repeating a tour
+ * within the same tab session.
+ */
 import type { WalkthroughOptions, WalkthroughStep } from "./walkthrough";
 import { startWalkthrough, WalkthroughChain } from "./walkthrough";
 import { recordDebug } from "./debug";
 
 /** Definition of a tour tied to a route (pathname pattern) or predicate. */
+/**
+ * Declarative description of a tour bound to a route match or custom matcher.
+ */
 export interface RegisteredTour {
 	id: string; // unique tour id (should match tourId if using persistence)
 	/** Simple string exact match, prefix (ending with *), RegExp, or custom matcher function. */
@@ -24,6 +43,11 @@ interface InternalRegisteredTour extends RegisteredTour {}
 
 const registry: InternalRegisteredTour[] = [];
 
+/**
+ * Register (or replace) a single tour. Replaces existing definition if ids collide.
+ *
+ * @param tour - The tour definition to add.
+ */
 export function registerTour(tour: RegisteredTour) {
 	const existingIdx = registry.findIndex((t) => t.id === tour.id);
 	if (existingIdx >= 0) registry.splice(existingIdx, 1, tour);
@@ -31,19 +55,26 @@ export function registerTour(tour: RegisteredTour) {
 	recordDebug("orchestrator", "register", tour.id, { match: tour.match });
 }
 
+/** Register multiple tours in order. */
 export function registerTours(tours: RegisteredTour[]) {
 	tours.forEach(registerTour);
 }
 
+/** Return a shallow copy of all registered tours (in insertion order). */
 export function listTours() {
 	return [...registry];
 }
 
+/** Remove all registered tours (no effect on persisted progress). */
 export function clearTours() {
 	registry.splice(0, registry.length);
 	recordDebug("orchestrator", "clear", "all");
 }
 
+/**
+ * Compute all tours whose matcher matches the provided pathname.
+ * Simple string exact, prefix (`/app/*`) or RegExp / function matchers supported.
+ */
 export function findMatchingTours(pathname: string) {
 	const matches = registry.filter((t) => matchPath(t.match, pathname));
 	recordDebug("orchestrator", "match", pathname, { count: matches.length });
@@ -66,6 +97,10 @@ function progressKey(tourId?: string) {
 	return tourId ? `__walkthrough:${tourId}` : undefined;
 }
 
+/**
+ * Check if a persisted tour id is marked completed in localStorage.
+ * @param tourId - The `tourId` used when persisting progress.
+ */
 export function isTourCompleted(tourId: string): boolean {
 	try {
 		const key = progressKey(tourId);
@@ -79,6 +114,7 @@ export function isTourCompleted(tourId: string): boolean {
 	}
 }
 
+/** Clear persisted progress for a single tour id. */
 export function clearTourProgress(tourId: string) {
 	try {
 		const key = progressKey(tourId);
@@ -86,6 +122,7 @@ export function clearTourProgress(tourId: string) {
 	} catch {}
 }
 
+/** Options controlling auto start behaviour for a pathname match. */
 export interface StartMatchOptions {
 	pathname: string;
 	/** If true, start only the first auto match; else all auto matches sequentially via chaining. */
@@ -93,6 +130,14 @@ export interface StartMatchOptions {
 }
 
 /** Start matching auto tours for a given pathname. Returns started tour IDs. */
+/**
+ * Start matching auto tours for a given pathname.
+ *
+ * Applies filtering: trigger=auto, condition(), oncePerSession, skipIfCompleted.
+ * Tours start immediately (unordered) unless `firstOnly` is true.
+ *
+ * @returns array of started tour ids (in the order they were begun).
+ */
 export async function startAutoMatches({
 	pathname,
 	firstOnly,
@@ -135,6 +180,12 @@ export async function startAutoMatches({
 }
 
 /** Chain and run all matching auto tours sequentially (respecting order). */
+/**
+ * Chain and run all matching auto tours sequentially (sorted by `order` then insertion).
+ * Each tour starts only after the previous finishes / skips. Persistence rules are applied.
+ *
+ * @returns ids list and a {@link WalkthroughChain} instance (or null if none matched).
+ */
 export async function chainAutoMatches(
 	pathname: string,
 ): Promise<{ ids: string[]; chain: WalkthroughChain | null }> {
@@ -187,6 +238,7 @@ export async function chainAutoMatches(
 }
 
 /** Manually start a tour by id (regardless of trigger type). */
+/** Manually start a tour by id regardless of trigger type. */
 export function startTourById(id: string) {
 	const t = registry.find((rt) => rt.id === id);
 	if (!t) throw new Error(`Tour '${id}' not registered`);
@@ -195,6 +247,7 @@ export function startTourById(id: string) {
 }
 
 /** Utility to bulk reset all persisted tours (useful in a dev panel). */
+/** Reset persisted progress for every registered tour (utility for dev tools). */
 export function resetAllTourProgress() {
 	registry.forEach((t) => {
 		if (t.options?.tourId || t.id) clearTourProgress(t.options?.tourId || t.id);
@@ -203,6 +256,10 @@ export function resetAllTourProgress() {
 }
 
 /** Dynamically import a module that exports tours (default export or named 'tours'). */
+/**
+ * Dynamically import a module expected to export an array of tours (default / named export).
+ * If an array is found it is registered and also returned. Non-array exports pass through.
+ */
 export async function loadTours(moduleSpecifier: string) {
 	const mod = (await import(/* @vite-ignore */ moduleSpecifier)) as Record<string, unknown>;
 	const maybeTours =

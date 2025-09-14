@@ -1,54 +1,105 @@
 /**
- * Lightweight framework-agnostic onboarding walkthrough library.
- * Features:
- *  - Darken screen & spotlight a target element.
- *  - Tooltip with title/content & navigation (Next, Back, Skip, Done).
- *  - Keyboard support (Esc to exit, Enter/RightArrow for next, LeftArrow for prev).
- *  - Auto-scroll & responsive repositioning on resize/scroll.
- *  - Step hooks (beforeStep / afterStep) and lifecycle callbacks.
- *  - Polling wait if target not yet in DOM (useful for lazy-loaded UI / shadcn portals).
- *  - Zero external dependencies. Works with any DOM (React, shadcn, plain HTML, etc.).
+ * Lightweight framework‑agnostic onboarding walkthrough / product tour library.
+ *
+ * Core ideas:
+ *  - Provide a small, dependency‑free primitive that can be orchestrated (manually, by route, or chained) in any framework.
+ *  - Keep DOM manipulation explicit & predictable while allowing customization hooks for styling and tooltip content.
+ *
+ * Built‑in capabilities:
+ *  - Darkens the screen and creates a highlight ring around a target element.
+ *  - Renders a tooltip (themeable or fully custom) with navigation controls (Back, Next, Skip, Done).
+ *  - Keyboard support (Esc exits; Enter / ArrowRight advances; ArrowLeft goes back).
+ *  - Auto scrolls target into view with configurable smooth behavior.
+ *  - Responsive repositioning on window resize, scroll, DOM mutations (MutationObserver) & optional re‑append to top of <body> (`alwaysOnTop`).
+ *  - Step level hooks (`beforeStep`, `afterStep`) and lifecycle callbacks (`onStepChange`, `onSkip`, `onFinish`).
+ *  - Polls for elements that are not yet in the DOM (useful for lazy loading, portals, transitions). Polling can be disabled (0ms wait) for immediate fail / skip.
+ *  - Optional persistence of progress (`persistProgress` + `tourId`) with resume semantics (`resume`).
+ *  - Focus trapping & accessibility (ARIA live region for step titles).
+ *  - No external CSS required (inline styles for default theme) yet easily themeable (`theme: 'tailwind' | 'unstyled'`).
+ *
+ * Not in scope / intentionally omitted:
+ *  - Position flipping library dependencies (custom minimal placement logic is used instead).
+ *  - Complex animation frameworks (keep animations simple & CSS based so they can be replacedcd externally).
+ *  - Global singleton management (caller decides orchestration patterns).
+ *
+ * Example:
+ * ```ts
+ * import { Walkthrough, startWalkthrough } from 'just-a-walkthrough';
+ *
+ * const steps: WalkthroughStep[] = [
+ *   { selector: '#logo', title: 'Logo', content: 'This is our brand mark.' },
+ *   { selector: '#nav-settings', title: 'Settings', content: 'Configure your profile here.' },
+ * ];
+ *
+ * startWalkthrough(steps, { tourId: 'basic-intro', persistProgress: true });
+ yes* ```
  */
+import { recordDebug } from "./debug";
 
+/**
+ * A single walkthrough step.
+ */
 export interface WalkthroughStep {
-	selector: string; // CSS selector for element to highlight
-	title?: string; // Optional heading
-	content?: string; // Optional rich (HTML allowed) content
-	padding?: number; // Extra padding around highlight (default 8)
-	focus?: boolean; // Attempt to focus the element (default false)
+	/** CSS selector used to locate the DOM element to highlight. */
+	selector: string;
+	/** Optional small heading shown at the top of the tooltip. */
+	title?: string;
+	/** Optional HTML (or plain text) content for the body of the tooltip. */
+	content?: string;
+	/** Extra padding (px) around the highlighted rectangle. Default: 8. */
+	padding?: number;
+	/** If true, attempts to call `.focus()` on the target element when shown. */
+	focus?: boolean;
+	/** Hook executed before the step becomes visible (awaited). */
 	beforeStep?: () => void | Promise<void>;
+	/** Hook executed after the step is hidden / before moving to next (awaited). */
 	afterStep?: () => void | Promise<void>;
-	/** Custom wait override (ms) for this step */
+	/** Per‑step override of the max wait (ms) for the selector to appear. Inherits `stepWaitMs`. */
 	waitMs?: number;
-	/** If true and element missing after wait, abort walkthrough (default: skip step) */
+	/** If true and element is not found after waiting, the entire walkthrough is aborted (skipped). Otherwise the step is skipped and the walkthrough continues. */
 	required?: boolean;
 }
 
+/**
+ * Configuration options applied to a walkthrough instance.
+ */
 export interface WalkthroughOptions {
-	backdropOpacity?: number; // 0..1 (default 0.55)
-	zIndex?: number; // root stacking (default 9999)
-	keyboard?: boolean; // enable keyboard navigation (default true)
-	allowBodyScroll?: boolean; // if false body overflow hidden while active (default false)
-	stepWaitMs?: number; // default polling max wait (default 5000)
-	stepPollIntervalMs?: number; // polling interval (default 120)
+	/** Backdrop darkness (0..1). Default: 0.55. */
+	backdropOpacity?: number;
+	/** Base z-index for the root overlay. Default: 9999. */
+	zIndex?: number;
+	/** Enable keyboard navigation. Default: true. */
+	keyboard?: boolean;
+	/** Allow body scrolling; if false sets `overflow:hidden` during tour. Default: false. */
+	allowBodyScroll?: boolean;
+	/** Max wait time for step element polling (ms). 0 disables waiting. Default: 5000. */
+	stepWaitMs?: number;
+	/** Poll interval (ms) for element resolution (minimum clamped to 0/1 internally). Default: 120. */
+	stepPollIntervalMs?: number;
+	/** Called when walkthrough finishes normally (user reached last step). */
 	onFinish?: () => void;
+	/** Called when walkthrough is skipped/aborted. Param provides reason tokens (e.g. 'esc', 'user-skip'). */
 	onSkip?: (reason?: string) => void;
+	/** Called after the internal step index changes (already applied). */
 	onStepChange?: (index: number) => void;
-	/** If true, clicking highlighted element advances to next step (default false) */
+	/** If true, clicking the highlighted target advances. Default: false. */
 	advanceOnTargetClick?: boolean;
-	/** If true, clicking outside tooltip but inside overlay advances (default false) */
+	/** If true, clicking any dimmed overlay area advances. Default: false. */
 	advanceOnOverlayClick?: boolean;
-	/** Smooth scroll target into view (default true) */
+	/** Attempts to scroll the target into view (smooth). Default: true. */
 	scrollIntoView?: boolean;
-	/** Scroll options (overrides behavior if provided) */
+	/** Custom scrollIntoView options (overrides default behavior). */
 	scrollOptions?: ScrollIntoViewOptions;
-	/** Persist progress to localStorage (default false) */
+	/** Persist progress to localStorage (`__walkthrough:<tourId>`). Default: false. */
 	persistProgress?: boolean;
-	/** Resume from stored index if partial (default true when persistProgress) */
+	/** Resume from stored index if not yet completed (implied true when `persistProgress`). */
 	resume?: boolean;
-	/** ID used for persistence; if omitted persistence disabled for this tour */
+	/** Identifier for persistence; if omitted persistence is disabled regardless of other flags. */
 	tourId?: string;
-	/** Provide custom tooltip renderer. Return an HTMLElement (content) inserted into tooltip container. Should include navigation UI or call ctx.defaultNav() */
+	/**
+	 * Custom tooltip renderer. Return a root element inserted into the provided container.
+	 * You are responsible for adding navigation UI OR call `ctx.defaultNav()` to inject standard buttons.
+	 */
 	customTooltip?: (ctx: {
 		step: WalkthroughStep;
 		index: number;
@@ -56,17 +107,17 @@ export interface WalkthroughOptions {
 		api: Walkthrough;
 		defaultNav: () => HTMLElement;
 	}) => HTMLElement;
-	/** Disable internal focus trap (default false) */
+	/** Disable internal focus trap. Default: false. */
 	disableFocusTrap?: boolean;
-	/** Theme styling mode (default 'default') */
+	/** Styling mode. 'default' injects minimal CSS, 'tailwind' expects Tailwind tokens, 'unstyled' leaves raw elements. */
 	theme?: "default" | "tailwind" | "unstyled";
-	/** Extra classes for tooltip container */
+	/** Additional classes appended to tooltip root. */
 	tooltipClass?: string;
-	/** Extra classes for highlight ring */
+	/** Additional classes appended to highlight ring. */
 	ringClass?: string;
-	/** Extra classes for backdrop overlay panels */
+	/** Additional classes appended to each backdrop panel. */
 	overlayClass?: string;
-	/** Keep overlay root re-appended as last <body> child to stay above modals (default true) */
+	/** Re-append root as last <body> child on DOM mutations to stay above modals. Default: true. */
 	alwaysOnTop?: boolean;
 }
 
@@ -106,6 +157,17 @@ type InternalResolvedOptions = {
 	alwaysOnTop: boolean;
 };
 
+/**
+ * Controls the lifecycle of a single walkthrough.
+ *
+ * Public methods:
+ *  - {@link start} : begin / resume at an index
+ *  - {@link next} / {@link prev}
+ *  - {@link finish} : mark completed, fire callback, remove overlay
+ *  - {@link skip} : abort without completion mark
+ *  - {@link destroy} : unconditionally tear down (no callbacks)
+ *  - {@link clearProgress} : remove persisted state (if enabled)
+ */
 export class Walkthrough {
 	private steps: InternalStep[];
 	private opts: InternalResolvedOptions;
@@ -127,6 +189,11 @@ export class Walkthrough {
 	private mutationObserver?: MutationObserver;
 	private focusTrapDisposer?: () => void;
 
+	/**
+	 * Create a new walkthrough.
+	 * @param steps Ordered list of steps.
+	 * @param options Optional configuration.
+	 */
 	constructor(steps: WalkthroughStep[], options: WalkthroughOptions = {}) {
 		this.steps = steps.map((s) => ({ ...s }));
 		this.opts = {
@@ -166,6 +233,11 @@ export class Walkthrough {
 		);
 	}
 
+	/**
+	 * Begin the walkthrough. If persistence+resume is active and stored progress
+	 * exists, that index will be used instead of `startIndex`.
+	 * Safe to call multiple times (subsequent calls while active are ignored).
+	 */
 	async start(startIndex = 0) {
 		if (this.active) return;
 		if (!this.hasDOM()) {
@@ -174,6 +246,12 @@ export class Walkthrough {
 		}
 		this.active = true;
 		this.buildDom();
+		recordDebug("walkthrough", "start", this.opts.tourId || "<anon>", {
+			startIndex,
+			steps: this.steps.length,
+			resume: this.opts.resume,
+			persist: this.opts.persistProgress,
+		});
 		if (!this.opts.allowBodyScroll) document.body.style.overflow = "hidden";
 		window.addEventListener("resize", this.resizeHandler, { passive: true });
 		window.addEventListener("scroll", this.scrollHandler, true);
@@ -196,6 +274,10 @@ export class Walkthrough {
 		await this.go(initial);
 	}
 
+	/**
+	 * Jump to an arbitrary 0‑based step index. If out of range, finishes the tour.
+	 * Intended for internal use & custom navigation UIs.
+	 */
 	async go(i: number): Promise<void> {
 		if (!this.active) return;
 		if (i < 0 || i >= this.steps.length) return this.finish();
@@ -205,11 +287,21 @@ export class Walkthrough {
 			if (prev.afterStep) await prev.afterStep();
 		}
 		this.index = i;
+		recordDebug("walkthrough", "step", this.opts.tourId || "<anon>", {
+			index: this.index,
+			selector: this.steps[this.index].selector,
+		});
 		this.opts.onStepChange(this.index);
 		const step = this.steps[this.index];
 		if (step.beforeStep) await step.beforeStep();
 		step._el = await this.resolveElement(step);
 		if (!step._el) {
+			recordDebug(
+				"walkthrough",
+				step.required ? "missing-required" : "missing-optional",
+				this.opts.tourId || "<anon>",
+				{ selector: step.selector },
+			);
 			if (step.required) {
 				this.skip(`Required element not found for selector: ${step.selector}`);
 				return;
@@ -218,33 +310,60 @@ export class Walkthrough {
 				return this.go(i + 1);
 			}
 		}
+		recordDebug("walkthrough", "resolved", this.opts.tourId || "<anon>", {
+			index: this.index,
+			selector: step.selector,
+		});
 		this.renderStep(step);
 		this.saveProgress();
 	}
 
+	/** Advance to next step. */
 	next() {
 		this.go(this.index + 1);
 	}
+	/** Go back to previous step. */
 	prev() {
 		this.go(this.index - 1);
 	}
 
+	/**
+	 * Complete the walkthrough (fires `onFinish`, marks persisted state as completed).
+	 * Further navigation is disabled until a new instance is started.
+	 */
 	finish() {
 		if (!this.active) return;
 		this.markCompleted();
 		this.cleanup();
+		recordDebug("walkthrough", "finish", this.opts.tourId || "<anon>", {
+			finalIndex: this.index,
+		});
 		this.opts.onFinish();
 	}
+	/**
+	 * Abort the walkthrough (fires `onSkip` with a reason token; does NOT mark completed).
+	 * Useful for user cancellations or required element failures.
+	 */
 	skip(reason?: string) {
 		if (!this.active) return;
 		this.cleanup();
+		recordDebug("walkthrough", "skip", this.opts.tourId || "<anon>", {
+			reason,
+			index: this.index,
+		});
 		this.opts.onSkip(reason);
 	}
 
+	/** Hard teardown: remove DOM & listeners without firing callbacks or marking progress. */
 	destroy() {
 		this.cleanup();
+		recordDebug("walkthrough", "destroy", this.opts.tourId || "<anon>");
 	}
 
+	/**
+	 * Attempt to resolve a DOM element for a step, polling until found or timeout.
+	 * Fast path: when effective wait is 0 only a single synchronous query is performed.
+	 */
 	private async resolveElement(
 		step: InternalStep,
 	): Promise<HTMLElement | null> {
@@ -268,6 +387,7 @@ export class Walkthrough {
 		return null;
 	}
 
+	/** Lazily build overlay DOM (idempotent). */
 	private buildDom() {
 		if (this.root) return;
 		const root = document.createElement("div");
@@ -384,6 +504,7 @@ export class Walkthrough {
 		}
 	}
 
+	/** Ensure root remains the last <body> child (z-order correctness). */
 	private ensureRootOnTop() {
 		if (!this.root) return;
 		const body = document.body;
@@ -392,6 +513,7 @@ export class Walkthrough {
 		}
 	}
 
+	/** Generate injected stylesheet (default theme only). */
 	private generateStyles(): string {
 		return `
     .wt-root { font-family: system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
@@ -411,6 +533,7 @@ export class Walkthrough {
     `;
 	}
 
+	/** Render highlight + tooltip for a resolved step element. */
 	private renderStep(step: InternalStep) {
 		if (!step._el) return;
 		const padding = step.padding ?? 8;
@@ -441,6 +564,7 @@ export class Walkthrough {
 		}
 	}
 
+	/** Position the dark overlay panels + highlight ring around the target. */
 	private positionHighlight(el: HTMLElement, padding: number) {
 		const rect = el.getBoundingClientRect();
 		const p = padding;
@@ -472,6 +596,7 @@ export class Walkthrough {
 		if (typeof window === "undefined") return; // Defensive check for window
 	}
 
+	/** Build & mount tooltip content for the current step. */
 	private renderTooltip(step: InternalStep) {
 		const { tooltip, live } = this.overlayParts;
 		tooltip.innerHTML = "";
@@ -549,6 +674,7 @@ export class Walkthrough {
 	private static FOCUSABLE_SEL =
 		'a[href], button:not([disabled]), textarea, input[type="text"], input[type="radio"], input[type="checkbox"], select, [tabindex]:not([tabindex="-1"])';
 
+	/** Simple cyclical focus trap for interactive tooltip controls. */
 	private setupFocusTrap(container: HTMLElement) {
 		this.teardownFocusTrap();
 		const handler = (e: KeyboardEvent) => {
@@ -580,11 +706,13 @@ export class Walkthrough {
 			document.removeEventListener("keydown", handler, true);
 	}
 
+	/** Remove previously installed focus trap handler if present. */
 	private teardownFocusTrap() {
 		this.focusTrapDisposer?.();
 		this.focusTrapDisposer = undefined;
 	}
 
+	/** Compute and set tooltip coordinates (prefers bottom, top, right, left then clamps). */
 	private positionTooltip(target: HTMLElement, tooltip: HTMLElement) {
 		const rect = target.getBoundingClientRect();
 		const gap = 14;
@@ -644,6 +772,7 @@ export class Walkthrough {
 		tooltip.style.left = `${left}px`;
 	}
 
+	/** Recompute highlight + tooltip position (on resize/scroll/mutation). */
 	private reposition() {
 		if (!this.active) return;
 		const step = this.steps[this.index];
@@ -653,6 +782,7 @@ export class Walkthrough {
 		if (typeof window === "undefined") return; // Defensive check for window
 	}
 
+	/** Keyboard handler for global navigation / dismissal keys. */
 	private onKey(e: KeyboardEvent) {
 		if (!this.active) return;
 		switch (e.key) {
@@ -669,6 +799,7 @@ export class Walkthrough {
 		}
 	}
 
+	/** Internal teardown used by finish/skip/destroy (difference is which callbacks fire). */
 	private cleanup() {
 		if (!this.active) return;
 		this.active = false;
@@ -679,12 +810,17 @@ export class Walkthrough {
 		this.teardownFocusTrap();
 		this.mutationObserver?.disconnect();
 		if (this.root?.parentNode) this.root.parentNode.removeChild(this.root);
+		recordDebug("walkthrough", "cleanup", this.opts.tourId || "<anon>", {
+			index: this.index,
+		});
 	}
 
 	// Persistence helpers
+	/** Build the localStorage key (if persistence enabled). */
 	private progressKey() {
 		return this.opts.tourId ? `__walkthrough:${this.opts.tourId}` : undefined;
 	}
+	/** Persist current index (not yet completed). */
 	private saveProgress() {
 		if (!this.opts.persistProgress || !this.opts.tourId) return;
 		try {
@@ -701,6 +837,7 @@ export class Walkthrough {
 			}
 		} catch {}
 	}
+	/** Load prior progress index (returns null if completed or unavailable). */
 	private loadProgress(): number | null {
 		if (!this.opts.persistProgress || !this.opts.tourId) return null;
 		try {
@@ -714,6 +851,7 @@ export class Walkthrough {
 		} catch {}
 		return null;
 	}
+	/** Persist completion + final index. */
 	private markCompleted() {
 		if (!this.opts.persistProgress || !this.opts.tourId) return;
 		try {
@@ -730,6 +868,7 @@ export class Walkthrough {
 			}
 		} catch {}
 	}
+	/** Remove any stored progress / completion state for this tour instance. */
 	clearProgress() {
 		if (this.opts.persistProgress && this.opts.tourId) {
 			try {
@@ -740,7 +879,10 @@ export class Walkthrough {
 	}
 }
 
-/** Convenience helper */
+/**
+ * Convenience helper to create + start a walkthrough immediately.
+ * Returns the instance so callers can call `skip()` or `clearProgress()` later.
+ */
 export function startWalkthrough(
 	steps: WalkthroughStep[],
 	options?: WalkthroughOptions,

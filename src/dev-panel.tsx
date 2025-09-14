@@ -1,3 +1,16 @@
+/**
+ * Developer utility panel for inspecting and manually triggering registered tours.
+ *
+ * This component is intended strictly for development / staging environments and
+ * should not be shipped to production UI. It offers:
+ *  - Listing of all registered tours (`listTours`) with matcher summary.
+ *  - Manual start buttons per tour.
+ *  - Reset (per tour & all) persistence helpers.
+ *  - Quick execution of auto matches (either simultaneously or chained).
+ *  - Collapsible floating panel UI (collapsed state stored in localStorage).
+ *
+ * Styling: Inline styles are applied for isolation; override using `className` / `style`.
+ */
 import { useEffect, useState } from "react";
 import {
 	chainAutoMatches,
@@ -9,22 +22,35 @@ import {
 } from "./orchestrator";
 import { startWalkthrough } from "./walkthrough";
 
+/** Props for {@link WalkthroughDevPanel}. */
 export interface DevPanelProps {
-	pathname?: string; // c urrent path for auto matching helpers
-	className?: string; // wrapper class override
-	style?: React.CSSProperties; // inline styles override
-	chainMatches?: boolean; // if true, chain matched tours when clicking "Run Matches"
+	/** Current path used when executing auto match logic (defaults to `window.location.pathname`). */
+	pathname?: string;
+	/** Extra class names for outer wrapper (use to override theme). */
+	className?: string;
+	/** Inline style overrides. */
+	style?: React.CSSProperties;
+	/** If true, clicking the run button chains matches sequentially instead of starting them concurrently. */
+	chainMatches?: boolean;
 }
 
 /**
  * Lightweight developer panel to inspect registered tours, run them manually, and reset progress.
  * Intended only for local development / staging environments.
  */
+/**
+ * Floating development aid component.
+ *
+ * Example:
+ * ```tsx
+ * {process.env.NODE_ENV !== 'production' && <WalkthroughDevPanel />}
+ * ```
+ */
 export function WalkthroughDevPanel({
-	pathname = window.location.pathname,
-	className = "",
-	style,
-	chainMatches,
+  pathname = window.location.pathname,
+  className = "",
+  style,
+  chainMatches,
 }: DevPanelProps) {
 	const [version, setVersion] = useState(0);
 	const [collapsed, setCollapsed] = useState<boolean>(() => {
