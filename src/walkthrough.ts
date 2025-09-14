@@ -37,6 +37,57 @@
 import { recordDebug } from "./debug";
 
 /**
+ * Basic, dependency‑free HTML sanitizer used for step `content` by default.
+ * Strategy:
+ *  - Parse into a detached DOM tree.
+ *  - Remove <script>, <style>, <template>, <iframe>, <object>, <embed> entirely.
+ *  - Strip attributes that start with `on` (event handlers) or are `srcdoc`.
+ *  - For URI bearing attributes (href, src, xlink:href) allow only http(s), mailto, tel, or data:image/(png|gif|jpeg|webp|svg+xml); block others (e.g. javascript:, data:text/html).
+ *  - Return serialized innerHTML of a container.
+ * This is intentionally minimal; users needing stricter policies can pre‑sanitize upstream.
+ */
+function sanitizeHTML(html: string): string {
+	try {
+		const doc = document.implementation.createHTMLDocument("wt");
+		const container = doc.createElement("div");
+		container.innerHTML = html;
+		const BLOCK_TAGS = new Set(["SCRIPT","STYLE","TEMPLATE","IFRAME","OBJECT","EMBED"]); 
+		const URL_ATTRS = ["href","src","xlink:href"]; 
+		const SAFE_URL = /^(https?:|mailto:|tel:|data:image\/(?:png|gif|jpeg|jpg|webp|svg\+xml);)/i;
+		const treeWalker = doc.createTreeWalker(container, NodeFilter.SHOW_ELEMENT);
+		const toRemove: Element[] = [];
+		while (treeWalker.nextNode()) {
+			const el = treeWalker.currentNode as Element;
+			if (BLOCK_TAGS.has(el.tagName)) {
+				toRemove.push(el);
+				continue;
+			}
+			// Clone attributes to iterate safely
+			for (const attr of Array.from(el.attributes)) {
+				const name = attr.name.toLowerCase();
+				if (name.startsWith("on") || name === "srcdoc") {
+					el.removeAttribute(attr.name);
+					continue;
+				}
+				if (URL_ATTRS.includes(name)) {
+					const v = attr.value.trim();
+					if (v && !SAFE_URL.test(v)) {
+						el.removeAttribute(attr.name);
+					}
+				}
+			}
+		}
+		for (const n of toRemove) n.remove();
+		return container.innerHTML;
+	} catch {
+		// On parse / DOM creation errors, fall back to textContent escaping
+		const div = document.createElement("div");
+		div.textContent = html;
+		return div.innerHTML;
+	}
+}
+
+/**
  * A single walkthrough step.
  */
 export interface WalkthroughStep {
@@ -44,8 +95,23 @@ export interface WalkthroughStep {
 	selector: string;
 	/** Optional small heading shown at the top of the tooltip. */
 	title?: string;
-	/** Optional HTML (or plain text) content for the body of the tooltip. */
+	/**
+	 * Optional HTML (or plain text) content for the body of the tooltip.
+	 *
+	 * SECURITY: By default this library sanitizes HTML placed into the tooltip to mitigate XSS
+	 * when step definitions are assembled from user‑generated or otherwise untrusted sources.
+	 * If you are 100% sure the string is safe (e.g. hard‑coded literal, already sanitized upstream)
+	 * you can set `allowUnsafeHTML: true` on the step to skip the sanitizer. Prefer leaving the
+	 * sanitizer enabled.
+	 */
 	content?: string;
+	/**
+	 * Opt‑out flag to bypass built‑in HTML sanitization for `content`.
+	 * ONLY set this to true for trusted, static strings. When false/omitted the content is
+	 * passed through a conservative allow‑list sanitizer that removes script/style tags, inline
+	 * event handlers and javascript: / data: URLs with script capable MIME types.
+	 */
+	allowUnsafeHTML?: boolean;
 	/** Extra padding (px) around the highlighted rectangle. Default: 8. */
 	padding?: number;
 	/** If true, attempts to call `.focus()` on the target element when shown. */
@@ -646,7 +712,10 @@ export class Walkthrough {
 			if (step.content) {
 				const c = document.createElement("div");
 				c.className = "wt-content";
-				c.innerHTML = step.content;
+				// Sanitize by default to mitigate XSS when content originates from untrusted sources.
+				c.innerHTML = step.allowUnsafeHTML
+					? step.content
+					: sanitizeHTML(step.content);
 				tooltip.appendChild(c);
 			}
 			tooltip.appendChild(defaultNav());
