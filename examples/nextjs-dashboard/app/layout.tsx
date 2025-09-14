@@ -1,6 +1,7 @@
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
+import WalkthroughProviderWrapper from "@/components/wt-provider-wrapper"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -19,7 +20,9 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          {children}
+          <WalkthroughProviderWrapper>
+            {children}
+          </WalkthroughProviderWrapper>
         </ThemeProvider>
       </body>
     </html>
