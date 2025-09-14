@@ -310,7 +310,8 @@ export class Walkthrough {
 	async start(startIndex = 0) {
 		if (this.active) return;
 		if (!this.hasDOM()) {
-			// Graceful no-op in non-DOM (SSR / test fallback)
+			// Graceful no-op in non-DOM (SSR / test fallback). Record a debug marker for visibility.
+			recordDebug("walkthrough", "start-no-dom", this.opts.tourId || "<anon>", { startIndex });
 			return;
 		}
 		this.active = true;
@@ -328,15 +329,21 @@ export class Walkthrough {
 		}
 		if (this.opts.keyboard)
 			document.addEventListener("keydown", this.keyHandler);
-		this.mutationObserver = new MutationObserver(() => {
-			this.reposition();
-			if (this.opts.alwaysOnTop) this.ensureRootOnTop();
-		});
-		this.mutationObserver.observe(document.body, {
-			attributes: true,
-			childList: true,
-			subtree: true,
-		});
+		// Mutation observer (layout changes) – skip if DOM APIs unavailable
+		if (this.hasDOM() && typeof MutationObserver !== "undefined") {
+			this.mutationObserver = new MutationObserver(() => {
+				if (!this.hasDOM()) return; // defensive
+				this.reposition();
+				if (this.opts.alwaysOnTop) this.ensureRootOnTop();
+			});
+			try {
+				this.mutationObserver.observe(document.body, {
+					attributes: true,
+					childList: true,
+					subtree: true,
+				});
+			} catch {}
+		}
 		const resumeIndex = this.loadProgress();
 		const initial =
 			this.opts.persistProgress && this.opts.resume && resumeIndex != null
@@ -481,7 +488,8 @@ export class Walkthrough {
 
 		const makePart = (cls: string) => {
 			const d = document.createElement("div");
-			d.className = "wt-part " + cls;
+			// Include generic overlay class so tests / consumers can query `.wt-overlay`
+			d.className = `wt-part wt-overlay ${cls}`;
 			d.style.position = "fixed";
 			if (this.opts.theme === "default") {
 				d.style.background = `rgba(0,0,0,${this.opts.backdropOpacity})`;
@@ -637,7 +645,7 @@ export class Walkthrough {
 
 	/** Position the dark overlay panels + highlight ring around the target. */
 	private positionHighlight(el: HTMLElement, padding: number) {
-		if (!hasDOM) return; // SSR safety
+		if (!hasDOM || typeof window === "undefined") return; // SSR safety
 		const rect = el.getBoundingClientRect();
 		const p = padding;
 		const x = rect.left - p;
@@ -793,7 +801,7 @@ export class Walkthrough {
 
 	/** Compute and set tooltip coordinates (prefers bottom, top, right, left then clamps). */
 	private positionTooltip(target: HTMLElement, tooltip: HTMLElement) {
-		if (!hasDOM) return;
+		if (!hasDOM || typeof window === "undefined") return;
 		const rect = target.getBoundingClientRect();
 		const gap = 14;
 		const tw = tooltip.offsetWidth || 320;

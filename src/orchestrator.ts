@@ -14,9 +14,10 @@
  * also supported via `oncePerSession` which uses `sessionStorage` to avoid repeating a tour
  * within the same tab session.
  */
+
+import { recordDebug } from "./debug";
 import type { WalkthroughOptions, WalkthroughStep } from "./walkthrough";
 import { startWalkthrough, WalkthroughChain } from "./walkthrough";
-import { recordDebug } from "./debug";
 
 /** Definition of a tour tied to a route (pathname pattern) or predicate. */
 /**
@@ -157,21 +158,25 @@ export async function startAutoMatches({
 		} = tour;
 		if (oncePerSession && sessionStorage.getItem(`__wt_session_started:${id}`))
 			continue;
-		if (
-			skipIfCompleted &&
-			options?.persistProgress &&
-			options.tourId &&
-			isTourCompleted(options.tourId)
-		)
-			continue;
+		// Only skip previously completed tours when skipIfCompleted is true (default behavior)
+		if (skipIfCompleted) {
+			if (
+				options?.persistProgress &&
+				(options.tourId || id) &&
+				isTourCompleted(options.tourId || id)
+			) {
+				continue;
+			}
+		}
 		if (condition) {
 			if (!(await condition())) {
 				recordDebug("orchestrator", "condition-skip", id);
 				continue;
 			}
 		}
-		recordDebug("orchestrator", "start", id);
-		startWalkthrough(steps, { tourId: id, ...options });
+		recordDebug("orchestrator", "start", id, { skipIfCompleted });
+		// Preserve existing tourId override if provided, else default to id for persistence
+		startWalkthrough(steps, { tourId: options?.tourId || id, ...options });
 		sessionStorage.setItem(`__wt_session_started:${id}`, "1");
 		started.push(id);
 		if (firstOnly) break;
@@ -261,7 +266,10 @@ export function resetAllTourProgress() {
  * If an array is found it is registered and also returned. Non-array exports pass through.
  */
 export async function loadTours(moduleSpecifier: string) {
-	const mod = (await import(/* @vite-ignore */ moduleSpecifier)) as Record<string, unknown>;
+	const mod = (await import(/* @vite-ignore */ moduleSpecifier)) as Record<
+		string,
+		unknown
+	>;
 	const maybeTours =
 		(mod as { tours?: unknown }).tours ??
 		(mod as { default?: unknown }).default ??
