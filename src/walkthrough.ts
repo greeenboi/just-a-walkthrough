@@ -36,6 +36,9 @@
  */
 import { recordDebug } from "./debug";
 
+// Runtime guard for SSR / non-DOM environments (e.g. during server rendering or certain test contexts)
+const hasDOM = typeof window !== "undefined" && typeof document !== "undefined";
+
 /**
  * Basic, dependency‑free HTML sanitizer used for step `content` by default.
  * Strategy:
@@ -319,8 +322,10 @@ export class Walkthrough {
 			persist: this.opts.persistProgress,
 		});
 		if (!this.opts.allowBodyScroll) document.body.style.overflow = "hidden";
-		window.addEventListener("resize", this.resizeHandler, { passive: true });
-		window.addEventListener("scroll", this.scrollHandler, true);
+		if (hasDOM) {
+			window.addEventListener("resize", this.resizeHandler, { passive: true });
+			window.addEventListener("scroll", this.scrollHandler, true);
+		}
 		if (this.opts.keyboard)
 			document.addEventListener("keydown", this.keyHandler);
 		this.mutationObserver = new MutationObserver(() => {
@@ -632,6 +637,7 @@ export class Walkthrough {
 
 	/** Position the dark overlay panels + highlight ring around the target. */
 	private positionHighlight(el: HTMLElement, padding: number) {
+		if (!hasDOM) return; // SSR safety
 		const rect = el.getBoundingClientRect();
 		const p = padding;
 		const x = rect.left - p;
@@ -649,12 +655,16 @@ export class Walkthrough {
 		left.style.height = `${h}px`;
 		right.style.top = `${y}px`;
 		right.style.left = `${x + w}px`;
-		right.style.width = `${Math.max(0, window.innerWidth - (x + w))}px`;
+		if (hasDOM) {
+			right.style.width = `${Math.max(0, window.innerWidth - (x + w))}px`;
+		}
 		right.style.height = `${h}px`;
 		bottom.style.top = `${y + h}px`;
 		bottom.style.left = "0px";
 		bottom.style.width = "100%";
-		bottom.style.height = `${Math.max(0, window.innerHeight - (y + h))}px`;
+		if (hasDOM) {
+			bottom.style.height = `${Math.max(0, window.innerHeight - (y + h))}px`;
+		}
 		ring.style.top = `${y}px`;
 		ring.style.left = `${x}px`;
 		ring.style.width = `${w}px`;
@@ -783,6 +793,7 @@ export class Walkthrough {
 
 	/** Compute and set tooltip coordinates (prefers bottom, top, right, left then clamps). */
 	private positionTooltip(target: HTMLElement, tooltip: HTMLElement) {
+		if (!hasDOM) return;
 		const rect = target.getBoundingClientRect();
 		const gap = 14;
 		const tw = tooltip.offsetWidth || 320;
@@ -873,8 +884,10 @@ export class Walkthrough {
 		if (!this.active) return;
 		this.active = false;
 		if (!this.opts.allowBodyScroll) document.body.style.overflow = "";
-		window.removeEventListener("resize", this.resizeHandler);
-		window.removeEventListener("scroll", this.scrollHandler, true);
+		if (hasDOM) {
+			window.removeEventListener("resize", this.resizeHandler);
+			window.removeEventListener("scroll", this.scrollHandler, true);
+		}
 		document.removeEventListener("keydown", this.keyHandler);
 		this.teardownFocusTrap();
 		this.mutationObserver?.disconnect();
