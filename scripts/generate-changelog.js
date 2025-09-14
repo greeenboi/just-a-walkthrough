@@ -71,17 +71,17 @@ function categorizeCommits(commits) {
         const message = commit.replace(/^[a-f0-9]+\s+/, ''); // Remove hash
         const lowerMessage = message.toLowerCase();
 
-        if (lowerMessage.includes('add') || lowerMessage.includes('new') || lowerMessage.includes('feat')) {
+        if (/\b(add|new|feat)\b/.test(lowerMessage)) {
             categories.added.push(message);
-        } else if (lowerMessage.includes('fix') || lowerMessage.includes('bug')) {
+        } else if (/\b(fix|bug)\b/.test(lowerMessage)) {
             categories.fixed.push(message);
-        } else if (lowerMessage.includes('remove') || lowerMessage.includes('delete')) {
+        } else if (/\b(remove|delete)\b/.test(lowerMessage)) {
             categories.removed.push(message);
-        } else if (lowerMessage.includes('change') || lowerMessage.includes('update') || lowerMessage.includes('modify')) {
+        } else if (/\b(change|update|modify)\b/.test(lowerMessage)) {
             categories.changed.push(message);
-        } else if (lowerMessage.includes('deprecat')) {
+        } else if (/\bdeprecat\w*\b/.test(lowerMessage)) {
             categories.deprecated.push(message);
-        } else if (lowerMessage.includes('security') || lowerMessage.includes('vulnerabilit')) {
+        } else if (/\b(security|vulnerabilit\w*)\b/.test(lowerMessage)) {
             categories.security.push(message);
         } else {
             categories.other.push(message);
@@ -162,7 +162,7 @@ function updateChangelog(version, newSection) {
         // Insert new section after [Unreleased]
         const unreleasedIndex = content.indexOf('## [Unreleased]');
         if (unreleasedIndex !== -1) {
-            const insertIndex = content.indexOf('\n', unreleasedIndex + 15) + 1;
+            const insertIndex = content.indexOf('\n', unreleasedIndex + '## [Unreleased]'.length) + 1;
             content = content.slice(0, insertIndex) + '\n' + newSection + content.slice(insertIndex);
         } else {
             // Fallback: add after header
