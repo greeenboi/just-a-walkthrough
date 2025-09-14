@@ -7,6 +7,8 @@ export default defineConfig({
 		setupFiles: "./vitest.setup.ts",
 		coverage: {
 			provider: "istanbul", // or 'v8'
+			exclude: ['examples/**','public/**'],
 		},
+		reporters: process.env.GITHUB_ACTIONS ? ['dot', 'github-actions'] : ['verbose'],
 	},
 });
