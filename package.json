@@ -60,8 +60,10 @@
 		"clean": "rimraf dist",
 		"preview": "vite preview",
 		"format": "biome check --write",
-		"test": "bunx vitest run",
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage --ui",
 		"test:bun": "bun test",
+		"test:ci": "vitest run",
 		"prepublishOnly": "npm run build && npm test"
 	},
 	"peerDependencies": {
@@ -72,6 +74,7 @@
 		"@biomejs/biome": "2.2.4",
 		"@types/react": "^19.0.12",
 		"@types/react-dom": "^19.0.4",
+		"@vitest/coverage-istanbul": "3.2.4",
 		"@vitest/ui": "^3.2.4",
 		"jsdom": "^24.0.0",
 		"rimraf": "^5.0.5",
