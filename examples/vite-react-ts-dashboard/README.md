@@ -88,6 +88,84 @@ template includes:
 
 All components are built with React and styled using Tailwind CSS for easy customization.
 
+## Walkthrough / Product Tour Integration
+
+This example dashboard includes an integration of the **`just-a-walkthrough`** library (a lightweight, zero‑dependency product tour system) to demonstrate how you can add onboarding flows to a real application UI.
+
+### Why It’s Included
+
+Interactive dashboards often benefit from guided introductions highlighting charts, profile areas, or configuration hotspots. The walkthrough library lets you:
+
+- Spotlight elements (darkened backdrop + focus ring)
+- Show a tooltip with step title/content & navigation
+- Persist progress (localStorage) so users don’t repeat completed tours
+- Chain multiple tours (e.g., dashboard first, then profile)
+- Trigger tours on demand via a button or automatically per route (with the orchestrator helper)
+
+### Where to Look in This Example
+
+- `src/pages/Dashboard/Home.tsx` – defines a multi‑step “Charts” tour aimed at KPIs & charts (`startChartsTour`).
+- `src/pages/UserProfiles.tsx` – defines a “Profile” tour explaining profile metadata & edit affordances.
+- (Optional) You could add a dev panel or route orchestrator similarly to the main library README, but this example keeps it minimal.
+
+### Basic Pattern Used
+
+The example imports the React provider hook from the library source (in a real app you would `npm install just-a-walkthrough`). A button triggers the `start` function with an ordered array of steps:
+
+```tsx
+import { useWalkthrough } from 'just-a-walkthrough/react';
+
+function ExampleButton() {
+   const { start } = useWalkthrough();
+   return (
+      <button
+         onClick={() => start([
+            { selector: '#metric-customers', title: 'Customers', content: 'Key customer metric tile.' },
+            { selector: '#chart-monthly-sales', title: 'Sales Trend', content: 'Recent monthly sales performance.' },
+         ], { tourId: 'intro-dashboard', persistProgress: true })}
+         className="px-3 py-2 text-sm font-medium text-white rounded-md bg-indigo-600 hover:bg-indigo-500"
+      >Start Dashboard Tour</button>
+   );
+}
+```
+
+### Adding the Provider
+
+Wrap your app root once:
+
+```tsx
+import { WalkthroughProvider } from 'just-a-walkthrough/react';
+
+export function AppRoot() {
+   return (
+      <WalkthroughProvider>
+         <App />
+      </WalkthroughProvider>
+   );
+}
+```
+
+### Step Authoring Tips
+
+- Use stable selectors or data attributes (e.g., `data-tour="profile-heading"`).
+- Set `stepWaitMs: 0` if the element is guaranteed present to avoid polling.
+- Provide `tourId` + `persistProgress: true` so repeat visits skip already finished tours.
+
+### Chaining (Optional)
+
+You can combine tours sequentially using the `WalkthroughChain` API if you want to stage onboarding phases. In this example each tour is independent for clarity.
+
+### Installing in Your Own Project
+
+1. Install the package: `npm i just-a-walkthrough`
+2. Wrap your root with the provider (optional but recommended for React convenience)
+3. Add buttons / triggers that call the `start` function
+4. (Optional) Register route-based tours and use the route orchestrator, or add the dev panel for local QA
+
+Refer to the root repository README for advanced topics (debugging, dev panel, orchestrator, theming).
+
+---
+
 ## Feature Comparison
 
 ### Free Version
