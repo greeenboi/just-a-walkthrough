@@ -64,6 +64,7 @@
 		"test:coverage": "vitest run --coverage --ui",
 		"test:bun": "bun test",
 		"test:ci": "vitest run",
+		"changelog": "node scripts/generate-changelog.js generate",
 		"prepublishOnly": "npm run build && npm test"
 	},
 	"peerDependencies": {
