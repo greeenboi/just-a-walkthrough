@@ -39,8 +39,8 @@
 		"webpack-cli": "^5.1.4",
 		"webpack-dev-server": "^5.0.4"
 	},
-	"dependencies": {
-		"@alpinejs/persist": "^3.14.1",
+		"dependencies": {
+			"@alpinejs/persist": "^3.14.1",
 		"@fullcalendar/core": "^6.1.15",
 		"@fullcalendar/daygrid": "^6.1.15",
 		"@fullcalendar/interaction": "^6.1.15",
@@ -53,6 +53,7 @@
 		"flatpickr": "^4.6.13",
 		"fullcalendar": "^6.1.15",
 		"jsvectormap": "^1.6.0",
-		"swiper": "^11.1.14"
+		"swiper": "^11.1.14",
+		"just-a-walkthrough": "file:../../"
 	}
 }

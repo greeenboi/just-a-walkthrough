@@ -14,6 +14,10 @@ import chart03 from "./components/charts/chart-03";
 import map01 from "./components/map-01";
 import "./components/calendar-init.js";
 import "./components/image-resize";
+// Walkthrough integration
+import { registerTours, startAutoMatches } from "just-a-walkthrough";
+// Walkthrough integration
+import { registerTours, startAutoMatches } from "just-a-walkthrough";
 
 Alpine.plugin(persist);
 window.Alpine = Alpine;
@@ -51,10 +55,36 @@ if (dropzoneArea.length) {
 
 // Document Loaded
 document.addEventListener("DOMContentLoaded", () => {
-	chart01();
-	chart02();
-	chart03();
-	map01();
+		chart01();
+		chart02();
+		chart03();
+		map01();
+		// Register and auto-start dashboard tour
+		registerTours([
+			{
+				id: "dashboard-tour",
+				match: () => true,
+				steps: [
+					{ selector: "header", title: "Header", content: "Use the header to navigate between sections." },
+					{ selector: "#sidebar", title: "Sidebar", content: "This sidebar contains the menu links." },
+				],
+				options: { tourId: "dashboard-tour", persistProgress: false },
+			},
+		]);
+		startAutoMatches({ pathname: window.location.pathname });
+	// Register and start the dashboard tour
+	registerTours([
+		{
+			id: "dashboard-tour",
+			match: () => true,
+			steps: [
+				{ selector: "header", title: "Header", content: "Use the header to navigate between sections." },
+				{ selector: "#sidebar", title: "Sidebar", content: "This sidebar contains the menu links." },
+			],
+			options: { tourId: "dashboard-tour", persistProgress: false },
+		},
+	]);
+	startAutoMatches({ pathname: window.location.pathname });
 });
 
 // Get the current year

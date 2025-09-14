@@ -76,7 +76,29 @@ TailAdmin is a pre-designed starting point for building a web-based dashboard us
 - Tables and Charts(Line and Bar)
 - Authentication forms and input elements
 - Alerts, Dropdowns, Modals, Buttons and more
-- Can't forget Dark Mode 🕶️
+ - Can't forget Dark Mode 🕶️
+
+## Guided Tour Integration
+
+This example integrates the `just-a-walkthrough` library to provide an interactive guided tour of the dashboard UI. The tour highlights key elements (Header and Sidebar) to onboard users.
+
+### Setup
+1. Install dependencies (including the local `just-a-walkthrough` package):
+   ```bash
+   npm install
+   # or yarn install
+   ```
+2. Start the development server:
+   ```bash
+   npm run start
+   # or yarn start
+   ```
+
+### Tour Implementation
+- **Registration**: In `src/js/index.js`, use `registerTours` to define tour steps.
+- **Auto-Start**: On page load, call `startAutoMatches` to launch the tour for the current pathname.
+
+You can customize tour steps in `examples/html-template-dashboard/src/js/index.js`.
 
 ## Feature Comparison
 
