@@ -1,6 +1,6 @@
 {
 	"name": "just-a-walkthrough",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Framework-agnostic onboarding walkthrough / product tour library with optional React provider & Tailwind/shadcn support.",
 	"author": {
 		"email": "suvan.gowrishanker.204@gmail.com",
