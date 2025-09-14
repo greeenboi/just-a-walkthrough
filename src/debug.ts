@@ -128,11 +128,55 @@ export function dumpWalkthroughDebug(): DebugDump {
  * Convenience helper: if debug mode enabled, prints a full dump via `console.info`.
  * Safe no‑op when disabled.
  */
-export function printWalkthroughDebug() {
+export interface PrintDebugOptions {
+  /** When true includes full event list; otherwise only summary counts & meta. Default: false */
+  full?: boolean;
+  /** Optional redactor applied to each event before printing (only when full=true). */
+  redact?: (e: DebugEvent) => DebugEvent;
+}
+
+/**
+ * Convenience helper: conditionally prints a debug snapshot.
+ *
+ * Security / leakage mitigation:
+ *  - By default ONLY aggregate counts + meta are printed (no raw events / selectors / messages).
+ *  - To print full events you must explicitly call with `{ full: true }`.
+ *  - A custom `redact` function can be supplied to scrub / transform event data before output.
+ *
+ * Example (summary only):
+ * ```ts
+ * printWalkthroughDebug();
+ * ```
+ * Example (full with basic redaction):
+ * ```ts
+ * printWalkthroughDebug({
+ *   full: true,
+ *   redact: e => ({ ...e, data: undefined }) // strip data payloads
+ * });
+ * ```
+ */
+export function printWalkthroughDebug(options: PrintDebugOptions = {}) {
   if (!runtimeEnabledFlag()) return;
+  const { full = false, redact } = options;
   try {
+    const dump = dumpWalkthroughDebug();
+    if (!full) {
+      // eslint-disable-next-line no-console
+      console.info('[walkthrough][debug summary]', {
+        generatedAt: dump.generatedAt,
+        counts: dump.counts,
+        total: dump.meta.total,
+      });
+      return;
+    }
+    const events = redact ? dump.events.map(redact) : dump.events;
     // eslint-disable-next-line no-console
-    console.info('[walkthrough][debug dump]', dumpWalkthroughDebug());
+    console.info('[walkthrough][debug full]', {
+      generatedAt: dump.generatedAt,
+      counts: dump.counts,
+      total: dump.meta.total,
+      events,
+    });
   } catch {}
 }
 
