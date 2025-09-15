@@ -7,12 +7,15 @@ import FormElements from "./pages/Forms/FormElements";
 
 import BasicTables from "./pages/Tables/BasicTables";
 import UserProfiles from "./pages/UserProfiles";
+import { RouteOrchestrator } from "../../../src/react-route-orchestrator";
+import { WalkthroughProviderWrapper } from "./wt-provider-wrapper";
 
 export default function App() {
 	return (
 		<>
 			<Router>
 				<ScrollToTop />
+				<WalkthroughProviderWrapper>
 				<Routes>
 					{/* Dashboard Layout */}
 					<Route element={<AppLayout />}>
@@ -29,6 +32,13 @@ export default function App() {
 						<Route path="/basic-tables" element={<BasicTables />} />
 					</Route>
 				</Routes>
+					{/* Route-based orchestration still supported for dynamic changes */}
+					<RouteOrchestrator
+						pathname={window.location.pathname}
+						chain
+						dynamicModule="./tours.ts"
+					/>
+				</WalkthroughProviderWrapper>
 			</Router>
 		</>
 	);
