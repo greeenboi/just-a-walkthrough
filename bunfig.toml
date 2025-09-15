@@ -1,2 +1,2 @@
 [test]
-preload = ["./test/bun-jsdom-setup.ts"]
+preload = ["./__tests__/bun-jsdom-setup.ts"]

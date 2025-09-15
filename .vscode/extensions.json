@@ -1,0 +1,10 @@
+{
+    "recommendations": [
+        "biomejs.biome",
+        "pandy.bun",
+        "oven.bun-vscode",
+        "christian-kohler.npm-intellisense",
+        "bradlc.vscode-tailwindcss",
+        "vitest.explorer"
+    ]
+}

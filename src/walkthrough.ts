@@ -36,6 +36,60 @@
  */
 import { recordDebug } from "./debug";
 
+// Runtime guard for SSR / non-DOM environments (e.g. during server rendering or certain test contexts)
+const hasDOM = typeof window !== "undefined" && typeof document !== "undefined";
+
+/**
+ * Basic, dependency‑free HTML sanitizer used for step `content` by default.
+ * Strategy:
+ *  - Parse into a detached DOM tree.
+ *  - Remove <script>, <style>, <template>, <iframe>, <object>, <embed> entirely.
+ *  - Strip attributes that start with `on` (event handlers) or are `srcdoc`.
+ *  - For URI bearing attributes (href, src, xlink:href) allow only http(s), mailto, tel, or data:image/(png|gif|jpeg|webp|svg+xml); block others (e.g. javascript:, data:text/html).
+ *  - Return serialized innerHTML of a container.
+ * This is intentionally minimal; users needing stricter policies can pre‑sanitize upstream.
+ */
+function sanitizeHTML(html: string): string {
+	try {
+		const doc = document.implementation.createHTMLDocument("wt");
+		const container = doc.createElement("div");
+		container.innerHTML = html;
+		const BLOCK_TAGS = new Set(["SCRIPT","STYLE","TEMPLATE","IFRAME","OBJECT","EMBED"]); 
+		const URL_ATTRS = ["href","src","xlink:href"]; 
+		const SAFE_URL = /^(https?:|mailto:|tel:|data:image\/(?:png|gif|jpeg|jpg|webp|svg\+xml);)/i;
+		const treeWalker = doc.createTreeWalker(container, NodeFilter.SHOW_ELEMENT);
+		const toRemove: Element[] = [];
+		while (treeWalker.nextNode()) {
+			const el = treeWalker.currentNode as Element;
+			if (BLOCK_TAGS.has(el.tagName)) {
+				toRemove.push(el);
+				continue;
+			}
+			// Clone attributes to iterate safely
+			for (const attr of Array.from(el.attributes)) {
+				const name = attr.name.toLowerCase();
+				if (name.startsWith("on") || name === "srcdoc") {
+					el.removeAttribute(attr.name);
+					continue;
+				}
+				if (URL_ATTRS.includes(name)) {
+					const v = attr.value.trim();
+					if (v && !SAFE_URL.test(v)) {
+						el.removeAttribute(attr.name);
+					}
+				}
+			}
+		}
+		for (const n of toRemove) n.remove();
+		return container.innerHTML;
+	} catch {
+		// On parse / DOM creation errors, fall back to textContent escaping
+		const div = document.createElement("div");
+		div.textContent = html;
+		return div.innerHTML;
+	}
+}
+
 /**
  * A single walkthrough step.
  */
@@ -44,8 +98,23 @@ export interface WalkthroughStep {
 	selector: string;
 	/** Optional small heading shown at the top of the tooltip. */
 	title?: string;
-	/** Optional HTML (or plain text) content for the body of the tooltip. */
+	/**
+	 * Optional HTML (or plain text) content for the body of the tooltip.
+	 *
+	 * SECURITY: By default this library sanitizes HTML placed into the tooltip to mitigate XSS
+	 * when step definitions are assembled from user‑generated or otherwise untrusted sources.
+	 * If you are 100% sure the string is safe (e.g. hard‑coded literal, already sanitized upstream)
+	 * you can set `allowUnsafeHTML: true` on the step to skip the sanitizer. Prefer leaving the
+	 * sanitizer enabled.
+	 */
 	content?: string;
+	/**
+	 * Opt‑out flag to bypass built‑in HTML sanitization for `content`.
+	 * ONLY set this to true for trusted, static strings. When false/omitted the content is
+	 * passed through a conservative allow‑list sanitizer that removes script/style tags, inline
+	 * event handlers and javascript: / data: URLs with script capable MIME types.
+	 */
+	allowUnsafeHTML?: boolean;
 	/** Extra padding (px) around the highlighted rectangle. Default: 8. */
 	padding?: number;
 	/** If true, attempts to call `.focus()` on the target element when shown. */
@@ -241,7 +310,8 @@ export class Walkthrough {
 	async start(startIndex = 0) {
 		if (this.active) return;
 		if (!this.hasDOM()) {
-			// Graceful no-op in non-DOM (SSR / test fallback)
+			// Graceful no-op in non-DOM (SSR / test fallback). Record a debug marker for visibility.
+			recordDebug("walkthrough", "start-no-dom", this.opts.tourId || "<anon>", { startIndex });
 			return;
 		}
 		this.active = true;
@@ -253,19 +323,27 @@ export class Walkthrough {
 			persist: this.opts.persistProgress,
 		});
 		if (!this.opts.allowBodyScroll) document.body.style.overflow = "hidden";
-		window.addEventListener("resize", this.resizeHandler, { passive: true });
-		window.addEventListener("scroll", this.scrollHandler, true);
+		if (hasDOM) {
+			window.addEventListener("resize", this.resizeHandler, { passive: true });
+			window.addEventListener("scroll", this.scrollHandler, true);
+		}
 		if (this.opts.keyboard)
 			document.addEventListener("keydown", this.keyHandler);
-		this.mutationObserver = new MutationObserver(() => {
-			this.reposition();
-			if (this.opts.alwaysOnTop) this.ensureRootOnTop();
-		});
-		this.mutationObserver.observe(document.body, {
-			attributes: true,
-			childList: true,
-			subtree: true,
-		});
+		// Mutation observer (layout changes) – skip if DOM APIs unavailable
+		if (this.hasDOM() && typeof MutationObserver !== "undefined") {
+			this.mutationObserver = new MutationObserver(() => {
+				if (!this.hasDOM()) return; // defensive
+				this.reposition();
+				if (this.opts.alwaysOnTop) this.ensureRootOnTop();
+			});
+			try {
+				this.mutationObserver.observe(document.body, {
+					attributes: true,
+					childList: true,
+					subtree: true,
+				});
+			} catch {}
+		}
 		const resumeIndex = this.loadProgress();
 		const initial =
 			this.opts.persistProgress && this.opts.resume && resumeIndex != null
@@ -410,7 +488,8 @@ export class Walkthrough {
 
 		const makePart = (cls: string) => {
 			const d = document.createElement("div");
-			d.className = "wt-part " + cls;
+			// Include generic overlay class so tests / consumers can query `.wt-overlay`
+			d.className = `wt-part wt-overlay ${cls}`;
 			d.style.position = "fixed";
 			if (this.opts.theme === "default") {
 				d.style.background = `rgba(0,0,0,${this.opts.backdropOpacity})`;
@@ -566,6 +645,7 @@ export class Walkthrough {
 
 	/** Position the dark overlay panels + highlight ring around the target. */
 	private positionHighlight(el: HTMLElement, padding: number) {
+		if (!hasDOM || typeof window === "undefined") return; // SSR safety
 		const rect = el.getBoundingClientRect();
 		const p = padding;
 		const x = rect.left - p;
@@ -583,12 +663,16 @@ export class Walkthrough {
 		left.style.height = `${h}px`;
 		right.style.top = `${y}px`;
 		right.style.left = `${x + w}px`;
-		right.style.width = `${Math.max(0, window.innerWidth - (x + w))}px`;
+		if (hasDOM) {
+			right.style.width = `${Math.max(0, window.innerWidth - (x + w))}px`;
+		}
 		right.style.height = `${h}px`;
 		bottom.style.top = `${y + h}px`;
 		bottom.style.left = "0px";
 		bottom.style.width = "100%";
-		bottom.style.height = `${Math.max(0, window.innerHeight - (y + h))}px`;
+		if (hasDOM) {
+			bottom.style.height = `${Math.max(0, window.innerHeight - (y + h))}px`;
+		}
 		ring.style.top = `${y}px`;
 		ring.style.left = `${x}px`;
 		ring.style.width = `${w}px`;
@@ -646,7 +730,10 @@ export class Walkthrough {
 			if (step.content) {
 				const c = document.createElement("div");
 				c.className = "wt-content";
-				c.innerHTML = step.content;
+				// Sanitize by default to mitigate XSS when content originates from untrusted sources.
+				c.innerHTML = step.allowUnsafeHTML
+					? step.content
+					: sanitizeHTML(step.content);
 				tooltip.appendChild(c);
 			}
 			tooltip.appendChild(defaultNav());
@@ -714,6 +801,7 @@ export class Walkthrough {
 
 	/** Compute and set tooltip coordinates (prefers bottom, top, right, left then clamps). */
 	private positionTooltip(target: HTMLElement, tooltip: HTMLElement) {
+		if (!hasDOM || typeof window === "undefined") return;
 		const rect = target.getBoundingClientRect();
 		const gap = 14;
 		const tw = tooltip.offsetWidth || 320;
@@ -804,8 +892,10 @@ export class Walkthrough {
 		if (!this.active) return;
 		this.active = false;
 		if (!this.opts.allowBodyScroll) document.body.style.overflow = "";
-		window.removeEventListener("resize", this.resizeHandler);
-		window.removeEventListener("scroll", this.scrollHandler, true);
+		if (hasDOM) {
+			window.removeEventListener("resize", this.resizeHandler);
+			window.removeEventListener("scroll", this.scrollHandler, true);
+		}
 		document.removeEventListener("keydown", this.keyHandler);
 		this.teardownFocusTrap();
 		this.mutationObserver?.disconnect();

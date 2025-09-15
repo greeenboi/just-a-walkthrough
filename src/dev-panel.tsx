@@ -47,7 +47,7 @@ export interface DevPanelProps {
  * ```
  */
 export function WalkthroughDevPanel({
-  pathname = window.location.pathname,
+  pathname,
   className = "",
   style,
   chainMatches,
@@ -71,11 +71,13 @@ export function WalkthroughDevPanel({
 
 	const forceRefresh = () => setVersion((v) => v + 1);
 
+	const effectivePathname = pathname || (typeof window !== 'undefined' ? window.location.pathname : '/');
+
 	const runMatches = async () => {
 		if (chainMatches) {
-			await chainAutoMatches(pathname);
+			await chainAutoMatches(effectivePathname);
 		} else {
-			await startAutoMatches({ pathname });
+			await startAutoMatches({ pathname: effectivePathname });
 		}
 		forceRefresh();
 	};

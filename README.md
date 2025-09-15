@@ -38,8 +38,8 @@ yarn add just-a-walkthrough
 import { startWalkthrough } from 'just-a-walkthrough';
 
 startWalkthrough([
-	{ selector: '#hero-cta', title: 'Welcome', content: 'Click here to begin.' },
-	{ selector: '.nav-settings', title: 'Settings', content: 'Manage preferences.' }
+  { selector: '#hero-cta', title: 'Welcome', content: 'Click here to begin.' },
+  { selector: '.nav-settings', title: 'Settings', content: 'Manage preferences.' }
 ]);
 ```
 
@@ -50,14 +50,14 @@ import { useEffect } from 'react';
 import { startWalkthrough } from 'just-a-walkthrough';
 
 export function Onboard() {
-	useEffect(() => {
-		const inst = startWalkthrough([
-			{ selector: '#dash-metric', title: 'Metrics' },
-			{ selector: '#create-btn', title: 'Create', content: 'Start something new' },
-		], { persistProgress: true, tourId: 'main-onboarding' });
-		return () => inst.destroy();
-	}, []);
-	return null;
+  useEffect(() => {
+    const inst = startWalkthrough([
+      { selector: '#dash-metric', title: 'Metrics' },
+      { selector: '#create-btn', title: 'Create', content: 'Start something new' },
+    ], { persistProgress: true, tourId: 'main-onboarding' });
+    return () => inst.destroy();
+  }, []);
+  return null;
 }
 ```
 
@@ -67,8 +67,8 @@ export function Onboard() {
 import { registerTours, startAutoMatches } from 'just-a-walkthrough';
 
 registerTours([
-	{ id: 'home-tour', match: '/home', steps: [ { selector: '#welcome', title: 'Hi!' } ] },
-	{ id: 'settings-tour', match: '/settings', steps: [ { selector: '#profile', title: 'Profile' } ], oncePerSession: true }
+  { id: 'home-tour', match: '/home', steps: [ { selector: '#welcome', title: 'Hi!' } ] },
+  { id: 'settings-tour', match: '/settings', steps: [ { selector: '#profile', title: 'Profile' } ], oncePerSession: true }
 ]);
 
 // Call on route change
@@ -101,12 +101,150 @@ Use `theme: 'tailwind'` to rely on your Tailwind stack (supply utility classes) 
 ```ts
 import { WalkthroughChain } from 'just-a-walkthrough';
 new WalkthroughChain([
-	{ id: 'a', steps: [ { selector: '#x' } ] },
-	{ id: 'b', steps: [ { selector: '#y' } ], options: { persistProgress: true, tourId: 'b' } }
+  { id: 'a', steps: [ { selector: '#x' } ] },
+  { id: 'b', steps: [ { selector: '#y' } ], options: { persistProgress: true, tourId: 'b' } }
 ]).start();
 ```
 
 Completed persistent tours are skipped automatically.
+
+## React Integration (Provider & Hook)
+
+For React apps you can wrap your tree with the `WalkthroughProvider` to get easy access to `start` and `chain` helpers plus reactive state (current index, active flag):
+
+```tsx
+import { WalkthroughProvider, useWalkthrough } from 'just-a-walkthrough/react';
+
+function LaunchTourButton() {
+  const { start, active } = useWalkthrough();
+  return (
+    <button
+      disabled={active}
+      onClick={() => start([
+        { selector: '#logo', title: 'Logo' },
+        { selector: '#settings', title: 'Settings' },
+      ], { persistProgress: true, tourId: 'react-main' })}
+    >Start Tour</button>
+  );
+}
+
+export function App() {
+  return (
+    <WalkthroughProvider>
+      <LaunchTourButton />
+      {/* rest of app */}
+    </WalkthroughProvider>
+  );
+}
+```
+
+Auto start on mount:
+
+```tsx
+<WalkthroughProvider autoStart={{ steps, options }} />
+```
+
+## React Route Orchestrator Component
+
+If you want automatic starting of registered route-based tours when the location changes, use the `RouteOrchestrator` helper:
+
+```tsx
+import { RouteOrchestrator } from 'just-a-walkthrough/react';
+import { registerTours } from 'just-a-walkthrough';
+
+registerTours([
+  { id: 'home-tour', match: '/home', trigger: 'auto', steps: [ { selector: '#home-title', title: 'Home' } ] },
+  { id: 'profile-tour', match: /\/users\//, trigger: 'auto', steps: [ { selector: '#avatar', title: 'Avatar' } ], order: 10 },
+]);
+
+function Routes({ pathname }: { pathname: string }) {
+  return (
+    <>
+      <RouteOrchestrator pathname={pathname} chain onStartIds={ids => console.log('Started tours', ids)} />
+      {/* your routed UI */}
+    </>
+  );
+}
+```
+
+Lazy load a module containing tour registrations before matching:
+
+```tsx
+<RouteOrchestrator pathname={pathname} dynamicModule={() => import('./tours')} />
+```
+
+## Dev Panel (Development Only)
+
+The optional `WalkthroughDevPanel` gives you a floating inspector for tours: start them manually, run auto matches, chain matches, and reset persistence.
+
+```tsx
+import { WalkthroughDevPanel } from 'just-a-walkthrough/react';
+
+function Root() {
+  return (
+    <>
+      {/* app UI */}
+      {import.meta.env.DEV && <WalkthroughDevPanel chainMatches />}
+    </>
+  );
+}
+```
+
+Features:
+
+- Lists all registered tours with matcher summary.
+- Shows completion status (persistent tours).
+- Start / Reset per tour; Reset All.
+- Run Matches (or Chain Matches if `chainMatches` prop true).
+- Collapsible; collapsed state stored in `localStorage` (`__wt_devpanel_collapsed`).
+
+Do NOT ship this to production (reveals internal tour structure).
+
+## Debugging / Diagnostics
+
+Instrumentation is available but silent by default. To enable and inspect internal events you can use one of:
+
+1. Build-time env var (e.g. with Vite): `JUST_A_WALKTHROUGH_DEBUG=true`
+2. Runtime flag: `window.__JUST_A_WALKTHROUGH_DEBUG = true`
+3. API call: `enableDebug(true)`
+
+Events recorded include categories:
+`walkthrough` (start, step, resolved, missing, finish, skip), `orchestrator` (registration, match, chain), `react` (route effects, dynamic loads).
+
+```ts
+import { enableDebug, dumpWalkthroughDebug, printWalkthroughDebug } from 'just-a-walkthrough/debug';
+
+enableDebug(true);
+// run some tours ...
+
+// Safe summary only (counts + meta, no raw events)
+printWalkthroughDebug();
+
+// Full detail (explicit opt-in) with redaction example
+printWalkthroughDebug({
+  full: true,
+  redact: e => ({ ...e, data: undefined })
+});
+
+const snapshot = dumpWalkthroughDebug(); // programmatic access
+```
+
+Security: by default `printWalkthroughDebug()` prints only aggregate counts (avoids leaking selectors or user data). Pass `{ full: true }` consciously in trusted environments.
+
+HTML Content Sanitization: step `content` strings are sanitized by default (removes `<script>`, `<style>`, `<iframe>` etc., strips event handler attributes like `onclick`, and blocks unsafe URL schemes such as `javascript:`). This mitigates XSS if tour definitions incorporate user‑generated text. If you absolutely trust the source, set `allowUnsafeHTML: true` on an individual step to bypass the sanitizer—but prefer leaving it enabled.
+
+You can also access a console proxy `wtDebug` which is a no-op unless debug is enabled:
+
+```ts
+import { wtDebug } from 'just-a-walkthrough/debug';
+wtDebug.log('current tour id', currentId);
+```
+
+## Advanced Usage Notes
+
+- Use `waitMs: 0` (or global `stepWaitMs: 0`) for elements that are guaranteed to be present to avoid unnecessary polling.
+- Prefer chaining tours when you have progressive disclosure flows; persistent tours auto-skip if already completed, keeping chains idempotent.
+- When dynamically removing highlighted elements mid-step (e.g. route transitions), the MutationObserver repositions but if the element disappears the next navigation call will resolve again. Consider guarding with required steps if element is critical.
 
 ## Accessibility Notes
 

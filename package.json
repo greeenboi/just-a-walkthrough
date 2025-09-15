@@ -1,6 +1,6 @@
 {
 	"name": "just-a-walkthrough",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Framework-agnostic onboarding walkthrough / product tour library with optional React provider & Tailwind/shadcn support.",
 	"author": {
 		"email": "suvan.gowrishanker.204@gmail.com",
@@ -60,8 +60,10 @@
 		"clean": "rimraf dist",
 		"preview": "vite preview",
 		"format": "biome check --write",
-		"test": "bunx vitest run",
+		"test": "vitest run --reporter=verbose",
+		"test:coverage": "vitest run --coverage --reporter=verbose",
 		"test:bun": "bun test",
+		"test:ci": "vitest run",
 		"changelog": "node scripts/generate-changelog.js generate",
 		"prepublishOnly": "npm run build && npm test"
 	},
@@ -73,11 +75,15 @@
 		"@biomejs/biome": "2.2.4",
 		"@types/react": "^19.0.12",
 		"@types/react-dom": "^19.0.4",
+		"@vitest/coverage-istanbul": "3.2.4",
 		"@vitest/ui": "^3.2.4",
 		"jsdom": "^24.0.0",
 		"rimraf": "^5.0.5",
 		"typescript": "~5.8.3",
 		"vite": "^7.1.2",
 		"vitest": "^3.2.4"
+	},
+	"dependencies": {
+		"@types/jsdom": "^21.1.7"
 	}
 }
