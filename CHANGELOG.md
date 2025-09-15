@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2025-09-15
+
+### Added
+
+- feat: implement unified walkthrough orchestration and cross-page tour functionality refactor: enhance component structure for walkthrough integration fix: update tour data attributes for improved accessibility delete: remove outdated tours module in favor of new orchestration approach
+- feat: integrate guided tour functionality using just-a-walkthrough library
+- test: add unit tests for debug module, dev panel, orchestrator branches, and route orchestrator feat: enhance walkthrough functionality with debug recording and DOM checks
+- chore: add @types/jsdom as a dependency for improved type definitions
+- fix: add runtime guard for SSR and non-DOM environments in Walkthrough class
+- chore: update test scripts and add coverage support
+- Add coverage directory to .gitignore to exclude vitest coverage files
+- Add README.md for Next.js Dashboard Walkthrough integration details
+- Add HTML content sanitization details to README.md for security awareness
+- Add tests for walkthrough content sanitization
+- Add automated changelog generation system based on package.json versions (#4)
+- Add walkthrough integration example to README.md for onboarding flows
+- Add VSCode extensions recommendations
+- Add Contributor Covenant Code of Conduct
+- Add Bearer workflow for code scanning
+- Add GNU Affero General Public License v3
+
+### Changed
+
+- Update vitest configuration to include coverage exclusion and adjust reporters for GitHub Actions
+- Update README.md to clarify enhancements section as historical
+- Change Dependabot update interval from weekly to monthly
+- Update README and package.json for improved documentation and repository links
+- Update package.json to include repository details and keywords
+
+### Deprecated
+
+- deprecated nextjs example
+
+### Fixed
+
+- fix: refactor tests to improve cleanup and ensure proper unmounting of React components
+- fix: update test and coverage scripts to use verbose reporter
+- fix: update preload path in bunfig.toml to reference the correct test directory
+- fix: update coverage configuration to include source files and exclude unnecessary directories
+- Alert fix info logger message (#3)
+
+### Security
+
+- Implement HTML sanitization for walkthrough content to enhance security
+
+### Other
+
+- removed bloat pages
+- removed redundant html example
+- why was this still here?
+- move unit tests to a relevant directory
+- added vitest ci workflow
+- Refactor code structure for improved readability and maintainability
+- Refactor WalkthroughDevPanel to use effectivePathname for auto match logic
+- added more relavant nextjs example
+- Refactor code formatting in README.md for consistency and readability
+- bump version to 0.1.1
+- doesn't work with biome
+- Create eslint.yml
+- [ImgBot] Optimize images
+- normalize repository.url
+- Improve code readability and defensive checks in walkthrough logic and tests
+- Refactor package.json and tsconfig.build.json for improved formatting and consistency
+- Bump the npm_and_yarn group across 2 directories with 5 updates
+- initial commit for package monorepo
+
+
 ## [0.1.0] - 2024-09-14
 
 ### Added
