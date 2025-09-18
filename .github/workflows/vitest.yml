@@ -1,4 +1,6 @@
 name: CI Testing with Vitest
+permissions:
+  contents: read
 
 on:
   push:
