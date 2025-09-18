@@ -9,6 +9,9 @@
 
 **Framework‑agnostic, zero‑dependency product tour / onboarding walkthrough with optional React helpers.**
 
+https://github.com/user-attachments/assets/27a1aff2-ca36-4b82-9b21-62209dff055f
+
+
 ## Features
 
 - Spotlight highlight & darkened backdrop (3 panel overlay + focus ring)
