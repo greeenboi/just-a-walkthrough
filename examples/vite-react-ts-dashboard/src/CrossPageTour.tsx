@@ -45,7 +45,11 @@ export function CrossPageTour() {
         });
         return;
       }
-      // 2. Charts tour
+
+      // 2. profile tour
+      if (!done('profile-tour')) { navigate('/profile'); return; }
+      
+      // 3. charts tour
       if (!done('charts-intro')) {
         advancingRef.current = true;
         start([
@@ -63,14 +67,16 @@ export function CrossPageTour() {
         });
         return;
       }
-      // If both done, move to forms if that tour not done
+      
+      // 4. forms tour
       if (!done('form-elements-intro')) {
         navigate('/form-elements');
         return;
       }
-      // Else progress forward if forms & tables & profile not done
+
+      // 4. tables tour
       if (!done('basic-tables-tour')) { navigate('/basic-tables'); return; }
-      if (!done('profile-tour')) { navigate('/profile'); return; }
+      
       return; // all done
     }
 

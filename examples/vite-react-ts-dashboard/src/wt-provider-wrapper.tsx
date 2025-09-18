@@ -12,8 +12,8 @@ export function WalkthroughProviderWrapper({ children }: { children: React.React
   return (
     <WalkthroughProvider>
       {children}
-  <CrossPageTour />
-  <WalkthroughDevPanel />
+      <CrossPageTour />
+      <WalkthroughDevPanel />
     </WalkthroughProvider>
   );
 }
