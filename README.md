@@ -12,6 +12,15 @@
 https://github.com/user-attachments/assets/27a1aff2-ca36-4b82-9b21-62209dff055f
 
 
+> Support us on PeerList!!
+<a href="https://peerlist.io/greeenboi/project/just-a-walkthrough" target="_blank" rel="noreferrer">
+				<img
+					src="https://peerlist.io/api/v1/projects/embed/PRJH7B8B78OLBLD8P169AJGJDDKRLA?showUpvote=false&theme=dark"
+					alt="Just A Walkthrough"
+					style="width: auto; height: 72px;"
+				/>
+			</a>
+
 ## Features
 
 - Spotlight highlight & darkened backdrop (3 panel overlay + focus ring)
