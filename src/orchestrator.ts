@@ -15,9 +15,13 @@
  * within the same tab session.
  */
 
+import { listActiveInstances } from "./active-registry";
 import { recordDebug } from "./debug";
 import type { WalkthroughOptions, WalkthroughStep } from "./walkthrough";
 import { startWalkthrough, WalkthroughChain } from "./walkthrough";
+
+// Runtime guard for SSR / non-DOM environments (matches src/walkthrough.ts).
+const hasDOM = typeof window !== "undefined" && typeof document !== "undefined";
 
 /** Definition of a tour tied to a route (pathname pattern) or predicate. */
 /**
@@ -29,7 +33,30 @@ export interface RegisteredTour {
 	match: string | RegExp | ((pathname: string) => boolean);
 	steps: WalkthroughStep[];
 	options?: WalkthroughOptions; // passed to startWalkthrough
-	trigger?: "auto" | "manual"; // auto: start when matched (default), manual: only programmatic
+	/**
+	 * When the tour is eligible to start:
+	 *  - `auto` (default): starts when its `match` matches during auto/chain runs.
+	 *  - `manual`: only started programmatically via {@link startTourById}.
+	 *  - `click`: started when a matching trigger element is clicked (see
+	 *    `triggerSelector` / the `data-wt-start` attribute) once {@link bindTourTriggers}
+	 *    is active. Excluded from auto/chain runs.
+	 */
+	trigger?: "auto" | "manual" | "click";
+	/**
+	 * CSS selector of the element(s) that start this tour when the `triggerEvent` fires
+	 * (only relevant for `trigger: 'click'`). Matching uses `element.closest(selector)`
+	 * so clicks on descendants of the trigger also count. If omitted, the tour is still
+	 * reachable via a `data-wt-start="<id>"` attribute.
+	 */
+	triggerSelector?: string;
+	/** Event that starts a `click` tour. Default `'click'`. */
+	triggerEvent?: keyof HTMLElementEventMap;
+	/**
+	 * For `trigger: 'click'` (and explicit trigger starts): when true, an explicit
+	 * click always starts the tour, ignoring `oncePerSession` / `skipIfCompleted` /
+	 * `condition`. Default false (gating is honored, consistent with auto starts).
+	 */
+	ignoreGatingOnClick?: boolean;
 	/** Only start if this returns truthy (async allowed). */
 	condition?: () => boolean | Promise<boolean>;
 	/** If true, only start once per browser session (sessionStorage). */
@@ -148,40 +175,141 @@ export async function startAutoMatches({
 	);
 	const started: string[] = [];
 	for (const tour of matches) {
-		const {
-			id,
-			condition,
-			oncePerSession,
-			options,
-			steps,
-			skipIfCompleted = true,
-		} = tour;
-		if (oncePerSession && sessionStorage.getItem(`__wt_session_started:${id}`))
-			continue;
-		// Only skip previously completed tours when skipIfCompleted is true (default behavior)
-		if (skipIfCompleted) {
-			if (
-				options?.persistProgress &&
-				(options.tourId || id) &&
-				isTourCompleted(options.tourId || id)
-			) {
-				continue;
-			}
+		const id = await maybeStartTour(tour);
+		if (id) {
+			started.push(id);
+			if (firstOnly) break;
 		}
-		if (condition) {
-			if (!(await condition())) {
-				recordDebug("orchestrator", "condition-skip", id);
-				continue;
-			}
-		}
-		recordDebug("orchestrator", "start", id, { skipIfCompleted });
-		// Preserve existing tourId override if provided, else default to id for persistence
-		startWalkthrough(steps, { tourId: options?.tourId || id, ...options });
-		sessionStorage.setItem(`__wt_session_started:${id}`, "1");
-		started.push(id);
-		if (firstOnly) break;
 	}
 	return started;
+}
+
+/**
+ * Shared gating + start path used by auto matches and explicit trigger starts.
+ * Applies `oncePerSession`, `skipIfCompleted`, and `condition` (unless `ignoreGating`),
+ * then starts the tour via {@link startWalkthrough}. Returns the started tour id, or
+ * `null` if it was gated out.
+ */
+async function maybeStartTour(
+	tour: RegisteredTour,
+	{ ignoreGating = false }: { ignoreGating?: boolean } = {},
+): Promise<string | null> {
+	const {
+		id,
+		condition,
+		oncePerSession,
+		options,
+		skipIfCompleted = true,
+	} = tour;
+	const tourId = options?.tourId || id;
+	if (!ignoreGating) {
+		if (oncePerSession && sessionStorage.getItem(`__wt_session_started:${id}`))
+			return null;
+		// Only skip previously completed tours when skipIfCompleted is true (default).
+		if (skipIfCompleted && options?.persistProgress && isTourCompleted(tourId))
+			return null;
+		if (condition && !(await condition())) {
+			recordDebug("orchestrator", "condition-skip", id);
+			return null;
+		}
+	}
+	recordDebug("orchestrator", "start", id, { skipIfCompleted, ignoreGating });
+	// Preserve existing tourId override if provided, else default to id for persistence.
+	startWalkthrough(tour.steps, { tourId, ...options });
+	try {
+		sessionStorage.setItem(`__wt_session_started:${id}`, "1");
+	} catch {}
+	return id;
+}
+
+/** True if a tour with the given (resolved) tourId currently has an active instance. */
+function isTourRunning(tourId: string): boolean {
+	return listActiveInstances().some((i) => i.getSnapshot().id === tourId);
+}
+
+// --- Click / DOM trigger binding -------------------------------------------
+let triggersBound = false;
+let delegatedHandler: EventListener | null = null;
+const boundEvents: string[] = [];
+
+/**
+ * Start a tour by id via the explicit-trigger path (used by click triggers and
+ * `data-wt-start`). Honors gating unless the tour opts into `ignoreGatingOnClick`.
+ * No-ops (with a debug marker) if the id is unknown or the tour is already running.
+ */
+export async function startTourByTrigger(id: string): Promise<string | null> {
+	const tour = registry.find((t) => t.id === id);
+	if (!tour) {
+		recordDebug("orchestrator", "trigger-miss", id);
+		return null;
+	}
+	const tourId = tour.options?.tourId || tour.id;
+	if (isTourRunning(tourId)) {
+		recordDebug("orchestrator", "trigger-dupe", id);
+		return null;
+	}
+	return maybeStartTour(tour, {
+		ignoreGating: tour.ignoreGatingOnClick ?? false,
+	});
+}
+
+function handleTriggerEvent(e: Event): void {
+	const target = e.target as Element | null;
+	if (!target || typeof target.closest !== "function") return;
+	// 1. Explicit attribute binding: data-wt-start="<tourId>"
+	const attrEl = target.closest("[data-wt-start]");
+	if (attrEl) {
+		const id = attrEl.getAttribute("data-wt-start");
+		if (id) {
+			void startTourByTrigger(id);
+			return;
+		}
+	}
+	// 2. Registered click tours whose triggerSelector matches this event/target.
+	for (const t of registry) {
+		if (t.trigger !== "click" || !t.triggerSelector) continue;
+		if ((t.triggerEvent ?? "click") !== e.type) continue;
+		if (target.closest(t.triggerSelector)) {
+			void startTourByTrigger(t.id);
+			return;
+		}
+	}
+}
+
+/**
+ * Install a single delegated document-level listener that starts tours on click (or a
+ * tour's custom `triggerEvent`) and on `data-wt-start` attribute clicks. Idempotent and
+ * SSR-guarded. Call once (e.g. from `RouteOrchestrator`); pair with
+ * {@link unbindTourTriggers} on teardown.
+ */
+export function bindTourTriggers(): void {
+	if (!hasDOM || triggersBound) return;
+	const events = new Set<string>(["click"]);
+	for (const t of registry) {
+		if (t.trigger === "click" && t.triggerEvent) events.add(t.triggerEvent);
+	}
+	delegatedHandler = handleTriggerEvent as EventListener;
+	events.forEach((ev) =>
+		document.addEventListener(ev, delegatedHandler as EventListener, true),
+	);
+	boundEvents.splice(0, boundEvents.length, ...events);
+	triggersBound = true;
+	recordDebug("orchestrator", "triggers-bound", undefined, {
+		events: [...events],
+	});
+}
+
+/** Remove the delegated trigger listener installed by {@link bindTourTriggers}. */
+export function unbindTourTriggers(): void {
+	if (delegatedHandler) {
+		boundEvents.forEach((ev) =>
+			document.removeEventListener(ev, delegatedHandler as EventListener, true),
+		);
+	}
+	delegatedHandler = null;
+	boundEvents.splice(0, boundEvents.length);
+	triggersBound = false;
+	recordDebug("orchestrator", "triggers-unbound");
 }
 
 /** Chain and run all matching auto tours sequentially (respecting order). */
@@ -249,6 +377,35 @@ export function startTourById(id: string) {
 	if (!t) throw new Error(`Tour '${id}' not registered`);
 	recordDebug("orchestrator", "manual-start", id);
 	return startWalkthrough(t.steps, { tourId: t.id, ...t.options });
+}
+
+/**
+ * Merge option overrides into a registered tour's `options` so they persist across
+ * restarts (used by the dev panel's live config editor). Does not affect an already
+ * running instance — call `Walkthrough.updateOptions` for that.
+ *
+ * @param id - Registered tour id.
+ * @param partial - Option fields to merge (undefined values are ignored).
+ * @returns true if the tour existed and was updated.
+ */
+export function updateTourOptions(
+	id: string,
+	partial: Partial<WalkthroughOptions>,
+): boolean {
+	const tour = registry.find((t) => t.id === id);
+	if (!tour) return false;
+	const clean: Record<string, unknown> = {};
+	for (const [k, v] of Object.entries(partial)) {
+		if (v !== undefined) clean[k] = v;
+	}
+	tour.options = {
+		...(tour.options || {}),
+		...(clean as Partial<WalkthroughOptions>),
+	};
+	recordDebug("orchestrator", "update-tour-options", id, {
+		keys: Object.keys(clean),
+	});
+	return true;
 }
 
 /** Utility to bulk reset all persisted tours (useful in a dev panel). */
