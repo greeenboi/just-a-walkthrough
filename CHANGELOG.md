@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Click triggers: `trigger: 'click'` tours plus a `data-wt-start="<id>"` attribute and
+  `triggerSelector`, wired through a single delegated document listener
+  (`bindTourTriggers` / `unbindTourTriggers`, auto-managed by `RouteOrchestrator`).
+  New React helpers `TourTrigger` / `useTourTrigger`. Includes click de-duplication and
+  an `ignoreGatingOnClick` opt-out.
+- `theme: 'shadcn'` — styles the overlay/ring/tooltip via shadcn/ui design tokens as CSS
+  variables at runtime (immune to Tailwind JIT purge). New `tokenColorFormat` (`raw` for
+  Tailwind v4 / OKLCH, `hsl` for Tailwind v3) and `themeVars` remapping. Works on
+  Tailwind v3 and v4.
+- Active-instances registry (`listActiveInstances`, `getActiveInstance`,
+  `subscribeActive`) tracking running tours framework-agnostically.
+- `Walkthrough.updateOptions(partial)` (live overlay rebuild), plus `getSnapshot()`,
+  `getCurrentIndex()`, `isActive()`; orchestrator `updateTourOptions(id, partial)`.
+- Dev panel overhaul: tabbed inspector (Tours / Wireframe / Config) with a live SVG flow
+  graph and live, persisted config/theme editing that applies to the running tour.
+
+### Changed
+
+- `WalkthroughProvider` now derives `active` / `currentIndex` / `instance` from the
+  active-instances registry, so state stays correct for chained tours and is exposed
+  from state (not a ref).
+- The Next.js example uses a reactive `RouteOrchestrator` (was a non-reactive mount
+  effect) and the `shadcn` theme.
+
 ## [0.1.1] - 2025-09-15
 
 ### Added
