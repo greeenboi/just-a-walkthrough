@@ -18,6 +18,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { getActiveInstance, subscribeActive } from "./active-registry";
 import type {
 	ChainedTour,
 	WalkthroughOptions,
@@ -34,7 +35,10 @@ import {
  */
 interface WalkthroughContextValue {
 	/** Start (or restart) a standalone walkthrough instance. Destroys any existing instance. */
-	start: (steps: WalkthroughStep[], options?: WalkthroughOptions) => Walkthrough;
+	start: (
+		steps: WalkthroughStep[],
+		options?: WalkthroughOptions,
+	) => Walkthrough;
 	/** Start a chain of tours (sequential). Returns the chain controller. */
 	chain: (tours: ChainedTour[]) => WalkthroughChain;
 	/** True if a walkthrough instance is currently active. */
@@ -65,81 +69,60 @@ const WalkthroughContext = createContext<WalkthroughContextValue | undefined>(
  * ```
  */
 export function WalkthroughProvider({
-  children,
-  autoStart,
+	children,
+	autoStart,
 }: {
-  children: React.ReactNode;
-  autoStart?: false | { steps: WalkthroughStep[]; options?: WalkthroughOptions };
+	children: React.ReactNode;
+	autoStart?:
+		| false
+		| { steps: WalkthroughStep[]; options?: WalkthroughOptions };
 }) {
 	const [instance, setInstance] = useState<Walkthrough | null>(null);
 	const [currentIndex, setCurrentIndex] = useState<number | null>(null);
-	const active = !!instance;
 	const instRef = useRef<Walkthrough | null>(null);
 
-  const start = useCallback(
-    (steps: WalkthroughStep[], options?: WalkthroughOptions) => {
-      instRef.current?.destroy();
-      const wt = startWalkthrough(steps, {
-        ...(options || {}),
-        onStepChange: (i) => {
-          setCurrentIndex(i);
-          options?.onStepChange?.(i);
-        },
-        onFinish: () => {
-          options?.onFinish?.();
-          instRef.current = null;
-          setInstance(null);
-          setCurrentIndex(null);
-        },
-        onSkip: (r) => {
-          options?.onSkip?.(r);
-          instRef.current = null;
-          setInstance(null);
-          setCurrentIndex(null);
-        },
-      });
-      instRef.current = wt;
-      setInstance(wt);
-      return wt;
-    },
-    [],
-  );
+	// Derive active state from the core active-instances registry. This keeps the
+	// context correct for BOTH standalone tours (start) and chained tours (chain) —
+	// the chain's internally-created instances register/unregister and emit step
+	// changes just like any other tour, so no manual callback wiring is needed here.
+	useEffect(() => {
+		const sync = () => {
+			const inst = getActiveInstance();
+			setInstance(inst);
+			setCurrentIndex(inst?.isActive() ? inst.getCurrentIndex() : null);
+		};
+		sync();
+		return subscribeActive(sync);
+	}, []);
 
-  const chain = useCallback((tours: ChainedTour[]) => {
-    const c = new WalkthroughChain(
-      tours.map((t) => ({
-        ...t,
-        options: {
-          ...(t.options || {}),
-          onStepChange: (i: number) => {
-            setCurrentIndex(i);
-            t.options?.onStepChange?.(i);
-          },
-          onFinish: () => {
-            t.options?.onFinish?.();
-            // chain advances automatically
-          },
-          onSkip: (r?: string) => {
-            t.options?.onSkip?.(r);
-          },
-        },
-      })),
-    );
-    c.start();
-    return c;
-  }, []);
+	const start = useCallback(
+		(steps: WalkthroughStep[], options?: WalkthroughOptions) => {
+			instRef.current?.destroy();
+			const wt = startWalkthrough(steps, options || {});
+			instRef.current = wt;
+			return wt;
+		},
+		[],
+	);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: deps will cause hook to recursively call itself
+	const chain = useCallback((tours: ChainedTour[]) => {
+		const c = new WalkthroughChain(tours);
+		c.start();
+		return c;
+	}, []);
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: run once on mount only
 	useEffect(() => {
 		if (autoStart) {
 			start(autoStart.steps, autoStart.options);
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
+
+	const active = !!instance && instance.isActive();
 
 	return (
 		<WalkthroughContext.Provider
-			value={{ start, chain, active, currentIndex, instance: instRef.current }}
+			value={{ start, chain, active, currentIndex, instance }}
 		>
 			{children}
 		</WalkthroughContext.Provider>
@@ -153,7 +136,8 @@ export function WalkthroughProvider({
  * to track lifecycle events manually.
  */
 export function useWalkthrough() {
-  const ctx = useContext(WalkthroughContext);
-  if (!ctx) throw new Error("useWalkthrough must be used within WalkthroughProvider");
-  return ctx;
+	const ctx = useContext(WalkthroughContext);
+	if (!ctx)
+		throw new Error("useWalkthrough must be used within WalkthroughProvider");
+	return ctx;
 }

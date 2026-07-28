@@ -11,8 +11,14 @@
  * `react:dyn-load-fail`, and `react:route-effect-cleanup` via the debug subsystem.
  */
 import { useEffect } from "react";
-import { chainAutoMatches, loadTours, startAutoMatches } from "./orchestrator";
 import { recordDebug } from "./debug";
+import {
+	bindTourTriggers,
+	chainAutoMatches,
+	loadTours,
+	startAutoMatches,
+	unbindTourTriggers,
+} from "./orchestrator";
 
 /** Props for {@link RouteOrchestrator}. */
 export interface RouteOrchestratorProps {
@@ -41,9 +47,9 @@ export interface RouteOrchestratorProps {
  * <RouteOrchestrator pathname={location.pathname} chain onStartIds={ids => console.log(ids)} />
  * ```
  *
- * Lazy load definitions first:
+ * Lazy load definitions first (pass a module specifier string, not a function):
  * ```tsx
- * <RouteOrchestrator pathname={location.pathname} dynamicModule={() => import('./tours'))} />
+ * <RouteOrchestrator pathname={location.pathname} dynamicModule="./tours" />
  * ```
  */
 export function RouteOrchestrator({
@@ -53,6 +59,14 @@ export function RouteOrchestrator({
 	dynamicModule,
 	onStartIds,
 }: RouteOrchestratorProps) {
+	// Bind the delegated click-trigger listener once for the lifetime of this component
+	// so `trigger: 'click'` tours and `data-wt-start` elements work. Idempotent under
+	// React StrictMode's double-invoke.
+	useEffect(() => {
+		bindTourTriggers();
+		return () => unbindTourTriggers();
+	}, []);
+
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
@@ -61,7 +75,9 @@ export function RouteOrchestrator({
 				try {
 					await loadTours(dynamicModule);
 				} catch (e) {
-					recordDebug("react", "dyn-load-fail", dynamicModule, { error: (e as Error).message });
+					recordDebug("react", "dyn-load-fail", dynamicModule, {
+						error: (e as Error).message,
+					});
 				}
 			}
 			if (chain) {

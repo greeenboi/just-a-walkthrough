@@ -14,6 +14,10 @@ export default defineConfig({
 		},
 		sourcemap: true,
 		minify: true,
+		// Keep the type declarations emitted to dist/types by `build:types` (tsc), which
+		// runs before this step. The `clean` script already empties dist beforehand, so
+		// Vite must not wipe it again here.
+		emptyOutDir: false,
 		rollupOptions: {
 			external: ["react", "react-dom"],
 		},

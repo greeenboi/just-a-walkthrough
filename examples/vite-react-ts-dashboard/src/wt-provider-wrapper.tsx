@@ -3,6 +3,7 @@ import { WalkthroughProvider } from "../../../src/react-provider";
 import WalkthroughDevPanel from "../../../src/dev-panel";
 // Using unified CrossPageTour instead of registry-based orchestration
 import { CrossPageTour } from "./CrossPageTour";
+import { ClickTourDemo } from "./ClickTourDemo";
 
 /**
  * Wrapper component mirroring the Next.js example pattern.
@@ -13,6 +14,7 @@ export function WalkthroughProviderWrapper({ children }: { children: React.React
     <WalkthroughProvider>
       {children}
       <CrossPageTour />
+      <ClickTourDemo />
       <WalkthroughDevPanel />
     </WalkthroughProvider>
   );

@@ -30,7 +30,9 @@ https://github.com/user-attachments/assets/27a1aff2-ca36-4b82-9b21-62209dff055f
 - Chain multiple tours with persistence-aware skipping
 - LocalStorage progress persistence & resume support
 - Optional once‑per‑session logic via orchestrator helper
-- Custom tooltip renderer + theming (`default`, `tailwind`, `unstyled`)
+- Start tours on page open (auto), programmatically, or on click (`trigger: 'click'` / `data-wt-start`)
+- Custom tooltip renderer + theming (`default`, `shadcn`, `tailwind`, `unstyled`) — shadcn works on Tailwind v3 & v4
+- Vue-devtools-style dev panel: wireframe flow + live config editing
 - Works with any DOM (vanilla, React, shadcn, portals)
 - Tiny, tree‑shakeable (no external deps)
 
@@ -106,7 +108,49 @@ Persistence options (when `persistProgress: true` & `tourId` set):
 
 ## Theming
 
-Use `theme: 'tailwind'` to rely on your Tailwind stack (supply utility classes) or `unstyled` to supply all styling manually.
+Choose a `theme` in `WalkthroughOptions`:
+
+| `theme` | What it does |
+| --- | --- |
+| `default` | Self-contained injected CSS. No external styles required. |
+| `shadcn` | Styles the overlay/ring/tooltip using your shadcn/ui design tokens (CSS variables) at runtime. **Recommended for shadcn apps.** |
+| `tailwind` | Adds Tailwind utility classes (`bg-popover`, `border-primary`, …). ⚠️ You must ensure those classes are generated (see note below). |
+| `unstyled` | No styling — bring your own via `tooltipClass` / `ringClass` / `overlayClass`. |
+
+### shadcn / Tailwind support (v3 **and** v4)
+
+The overlay is created at runtime, so Tailwind's JIT never "sees" utility classes the
+library adds — with `theme: 'tailwind'` they get purged and the tour renders unstyled
+unless you safelist them. **`theme: 'shadcn'` avoids this entirely** by referencing your
+design tokens as CSS variables directly, so it works regardless of purge and inherits
+your light/dark theme automatically.
+
+shadcn's token format differs between Tailwind majors, so pick `tokenColorFormat`:
+
+```ts
+// Tailwind v4 / current shadcn (tokens are full OKLCH colors)
+startWalkthrough(steps, { theme: 'shadcn' }); // tokenColorFormat: 'raw' (default)
+
+// Tailwind v3 shadcn (tokens are bare `H S L` triples)
+startWalkthrough(steps, { theme: 'shadcn', tokenColorFormat: 'hsl' });
+```
+
+Remap which CSS variables are used with `themeVars`:
+
+```ts
+startWalkthrough(steps, {
+  theme: 'shadcn',
+  themeVars: { primary: '--accent', ring: '--accent' },
+});
+```
+
+Roles: `popover`, `popoverForeground`, `border`, `primary`, `primaryForeground`, `ring`
+(defaulting to `--popover`, `--popover-foreground`, `--border`, `--primary`,
+`--primary-foreground`, `--ring`).
+
+If you prefer `theme: 'tailwind'` (utility classes), add the library to your Tailwind
+`content` / safelist so the classes are generated — e.g. on v4:
+`@source "../node_modules/just-a-walkthrough/dist";`
 
 ## Chain Multiple Tours
 
@@ -179,15 +223,74 @@ function Routes({ pathname }: { pathname: string }) {
 }
 ```
 
-Lazy load a module containing tour registrations before matching:
+Lazy load a module containing tour registrations before matching (pass a module
+specifier **string**, which is `import()`-ed internally):
 
 ```tsx
-<RouteOrchestrator pathname={pathname} dynamicModule={() => import('./tours')} />
+<RouteOrchestrator pathname={pathname} dynamicModule="./tours" />
 ```
+
+Mounting `RouteOrchestrator` also activates click triggers (see below).
+
+## Click Triggers (start a tour on click)
+
+Besides `auto` (start on route match) and `manual` (programmatic only), a tour can use
+`trigger: 'click'` to start when a matching element is clicked. Two ways to wire it:
+
+**1. Declarative `data-wt-start` attribute** — works on any element once the delegated
+listener is active (mount `RouteOrchestrator`, or call `bindTourTriggers()` yourself):
+
+```tsx
+registerTour({ id: 'help', trigger: 'click', match: '*', steps: [/* … */] });
+
+// anywhere in your UI (clicks on descendants count too):
+<button data-wt-start="help">Take the tour</button>
+```
+
+**2. A `triggerSelector`** on the registration (no attribute needed):
+
+```ts
+registerTour({
+  id: 'help',
+  trigger: 'click',
+  triggerSelector: '#help-button',
+  match: '*',
+  steps: [/* … */],
+});
+```
+
+**React helpers:**
+
+```tsx
+import { TourTrigger, useTourTrigger } from 'just-a-walkthrough';
+
+<TourTrigger tourId="help">Take the tour</TourTrigger>;
+// or
+const startHelp = useTourTrigger('help');
+<button onClick={startHelp}>Take the tour</button>;
+```
+
+Notes:
+- Clicks are de-duplicated: a second click while the tour is running is ignored.
+- By default click starts honor gating (`oncePerSession` / `skipIfCompleted` /
+  `condition`). Set `ignoreGatingOnClick: true` on the tour to always start on click.
+- `click` (and `manual`) tours are excluded from `startAutoMatches` / `chainAutoMatches`.
 
 ## Dev Panel (Development Only)
 
-The optional `WalkthroughDevPanel` gives you a floating inspector for tours: start them manually, run auto matches, chain matches, and reset persistence.
+The optional `WalkthroughDevPanel` is a Vue-devtools-style floating inspector for tours,
+with three tabs:
+
+- **Tours** — list registered tours (matcher summary, completed/pending/running), start/
+  restart/reset each, and jump to any step of the running tour.
+- **Wireframe** — an SVG graph of every tour's step flow (grouped by match); the live
+  step is highlighted and nodes of a running tour are clickable to jump.
+- **Config** — live-edit the selected tour's options (theme, backdrop, colors, behavior
+  toggles). Changes apply immediately to a running tour and persist across restarts/
+  reloads (`localStorage` `__wt_devpanel_tweaks:<id>`).
+
+It reads live state from the core active-instances registry, so it reflects tours
+started by any means — provider, orchestrator, click trigger, or a direct call.
 
 ```tsx
 import { WalkthroughDevPanel } from 'just-a-walkthrough/react';
@@ -202,12 +305,9 @@ function Root() {
 }
 ```
 
-Features:
+Also:
 
-- Lists all registered tours with matcher summary.
-- Shows completion status (persistent tours).
-- Start / Reset per tour; Reset All.
-- Run Matches (or Chain Matches if `chainMatches` prop true).
+- Run Matches (or Chain Matches if `chainMatches` prop true); Refresh; Reset All.
 - Collapsible; collapsed state stored in `localStorage` (`__wt_devpanel_collapsed`).
 
 Do NOT ship this to production (reveals internal tour structure).

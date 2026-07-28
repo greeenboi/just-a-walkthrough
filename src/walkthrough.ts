@@ -34,10 +34,38 @@
  * startWalkthrough(steps, { tourId: 'basic-intro', persistProgress: true });
  * ```
  */
+import {
+	__emitActive,
+	__registerActive,
+	__unregisterActive,
+	type ActiveTourSnapshot,
+} from "./active-registry";
 import { recordDebug } from "./debug";
 
 // Runtime guard for SSR / non-DOM environments (e.g. during server rendering or certain test contexts)
 const hasDOM = typeof window !== "undefined" && typeof document !== "undefined";
+
+/**
+ * Logical color roles used by the `shadcn` theme. Each maps to a shadcn/ui design-token
+ * CSS custom property (overridable via {@link WalkthroughOptions.themeVars}).
+ */
+export type ShadcnTokenRole =
+	| "popover"
+	| "popoverForeground"
+	| "border"
+	| "primary"
+	| "primaryForeground"
+	| "ring";
+
+/** Default CSS custom property name for each shadcn token role. */
+const SHADCN_DEFAULT_VARS: Record<ShadcnTokenRole, string> = {
+	popover: "--popover",
+	popoverForeground: "--popover-foreground",
+	border: "--border",
+	primary: "--primary",
+	primaryForeground: "--primary-foreground",
+	ring: "--ring",
+};
 
 /**
  * Basic, dependency‑free HTML sanitizer used for step `content` by default.
@@ -54,9 +82,17 @@ function sanitizeHTML(html: string): string {
 		const doc = document.implementation.createHTMLDocument("wt");
 		const container = doc.createElement("div");
 		container.innerHTML = html;
-		const BLOCK_TAGS = new Set(["SCRIPT","STYLE","TEMPLATE","IFRAME","OBJECT","EMBED"]); 
-		const URL_ATTRS = ["href","src","xlink:href"]; 
-		const SAFE_URL = /^(https?:|mailto:|tel:|data:image\/(?:png|gif|jpeg|jpg|webp|svg\+xml);)/i;
+		const BLOCK_TAGS = new Set([
+			"SCRIPT",
+			"STYLE",
+			"TEMPLATE",
+			"IFRAME",
+			"OBJECT",
+			"EMBED",
+		]);
+		const URL_ATTRS = ["href", "src", "xlink:href"];
+		const SAFE_URL =
+			/^(https?:|mailto:|tel:|data:image\/(?:png|gif|jpeg|jpg|webp|svg\+xml);)/i;
 		const treeWalker = doc.createTreeWalker(container, NodeFilter.SHOW_ELEMENT);
 		const toRemove: Element[] = [];
 		while (treeWalker.nextNode()) {
@@ -178,8 +214,25 @@ export interface WalkthroughOptions {
 	}) => HTMLElement;
 	/** Disable internal focus trap. Default: false. */
 	disableFocusTrap?: boolean;
-	/** Styling mode. 'default' injects minimal CSS, 'tailwind' expects Tailwind tokens, 'unstyled' leaves raw elements. */
-	theme?: "default" | "tailwind" | "unstyled";
+	/**
+	 * Styling mode:
+	 *  - `default`: injects minimal self-contained CSS (no external styles required).
+	 *  - `shadcn`: styles the overlay/ring/tooltip via shadcn/ui design tokens referenced
+	 *    directly as CSS variables at runtime — works under both Tailwind v3 and v4 and is
+	 *    NOT subject to Tailwind's JIT purge (unlike `tailwind`). See `tokenColorFormat`.
+	 *  - `tailwind`: adds Tailwind utility classes (requires the consumer to include these
+	 *    classes in their content/safelist so they are generated).
+	 *  - `unstyled`: leaves raw elements for full custom styling.
+	 */
+	theme?: "default" | "shadcn" | "tailwind" | "unstyled";
+	/**
+	 * For the `shadcn` theme: how design-token CSS variables are consumed.
+	 *  - `raw` (default): `var(--token)` — correct for Tailwind v4 / shadcn (OKLCH values).
+	 *  - `hsl`: `hsl(var(--token))` — correct for Tailwind v3 shadcn (bare `H S L` triples).
+	 */
+	tokenColorFormat?: "raw" | "hsl";
+	/** For the `shadcn` theme: remap logical color roles to specific CSS custom properties. */
+	themeVars?: Partial<Record<ShadcnTokenRole, string>>;
 	/** Additional classes appended to tooltip root. */
 	tooltipClass?: string;
 	/** Additional classes appended to highlight ring. */
@@ -219,7 +272,9 @@ type InternalResolvedOptions = {
 		defaultNav: () => HTMLElement;
 	}) => HTMLElement;
 	disableFocusTrap: boolean;
-	theme: "default" | "tailwind" | "unstyled";
+	theme: "default" | "shadcn" | "tailwind" | "unstyled";
+	tokenColorFormat: "raw" | "hsl";
+	themeVars?: Partial<Record<ShadcnTokenRole, string>>;
 	tooltipClass?: string;
 	ringClass?: string;
 	overlayClass?: string;
@@ -287,6 +342,8 @@ export class Walkthrough {
 			customTooltip: options.customTooltip,
 			disableFocusTrap: options.disableFocusTrap ?? false,
 			theme: options.theme ?? "default",
+			tokenColorFormat: options.tokenColorFormat ?? "raw",
+			themeVars: options.themeVars,
 			tooltipClass: options.tooltipClass,
 			ringClass: options.ringClass,
 			overlayClass: options.overlayClass,
@@ -311,10 +368,13 @@ export class Walkthrough {
 		if (this.active) return;
 		if (!this.hasDOM()) {
 			// Graceful no-op in non-DOM (SSR / test fallback). Record a debug marker for visibility.
-			recordDebug("walkthrough", "start-no-dom", this.opts.tourId || "<anon>", { startIndex });
+			recordDebug("walkthrough", "start-no-dom", this.opts.tourId || "<anon>", {
+				startIndex,
+			});
 			return;
 		}
 		this.active = true;
+		__registerActive(this);
 		this.buildDom();
 		recordDebug("walkthrough", "start", this.opts.tourId || "<anon>", {
 			startIndex,
@@ -370,6 +430,7 @@ export class Walkthrough {
 			selector: this.steps[this.index].selector,
 		});
 		this.opts.onStepChange(this.index);
+		__emitActive();
 		const step = this.steps[this.index];
 		if (step.beforeStep) await step.beforeStep();
 		step._el = await this.resolveElement(step);
@@ -475,9 +536,9 @@ export class Walkthrough {
 		root.style.inset = "0";
 		root.style.zIndex = String(this.opts.zIndex);
 		root.style.pointerEvents = "none";
-		// Inject styles once (only for default theme)
+		// Inject styles once (self-contained themes: default & shadcn)
 		if (
-			this.opts.theme === "default" &&
+			(this.opts.theme === "default" || this.opts.theme === "shadcn") &&
 			!document.getElementById("__walkthrough_styles")
 		) {
 			const style = document.createElement("style");
@@ -491,7 +552,7 @@ export class Walkthrough {
 			// Include generic overlay class so tests / consumers can query `.wt-overlay`
 			d.className = `wt-part wt-overlay ${cls}`;
 			d.style.position = "fixed";
-			if (this.opts.theme === "default") {
+			if (this.opts.theme === "default" || this.opts.theme === "shadcn") {
 				d.style.background = `rgba(0,0,0,${this.opts.backdropOpacity})`;
 			} else if (this.opts.theme === "tailwind") {
 				d.classList.add("bg-black/60");
@@ -514,6 +575,12 @@ export class Walkthrough {
 			ring.style.borderRadius = "8px";
 			ring.style.boxShadow =
 				"0 0 0 4px rgba(99,102,241,0.35), 0 4px 18px rgba(0,0,0,0.4)";
+			ring.style.transition = "all 180ms cubic-bezier(.4,0,.2,1)";
+		} else if (this.opts.theme === "shadcn") {
+			const ringColor = this.tokenColor("ring");
+			ring.style.border = `2px solid ${ringColor}`;
+			ring.style.borderRadius = "8px";
+			ring.style.boxShadow = `0 0 0 4px ${ringColor}, 0 4px 18px rgba(0,0,0,0.4)`;
 			ring.style.transition = "all 180ms cubic-bezier(.4,0,.2,1)";
 		} else if (this.opts.theme === "tailwind") {
 			ring.classList.add(
@@ -592,8 +659,17 @@ export class Walkthrough {
 		}
 	}
 
-	/** Generate injected stylesheet (default theme only). */
+	/** Resolve a shadcn token role to a CSS color expression honoring `tokenColorFormat`. */
+	private tokenColor(role: ShadcnTokenRole): string {
+		const varName = this.opts.themeVars?.[role] || SHADCN_DEFAULT_VARS[role];
+		return this.opts.tokenColorFormat === "hsl"
+			? `hsl(var(${varName}))`
+			: `var(${varName})`;
+	}
+
+	/** Generate the injected stylesheet for a self-contained theme (default or shadcn). */
 	private generateStyles(): string {
+		if (this.opts.theme === "shadcn") return this.generateShadcnStyles();
 		return `
     .wt-root { font-family: system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
     .wt-tooltip { background: #111827EE; color: #f9fafb; border: 1px solid #374151; border-radius: 10px; padding: 16px 18px; box-shadow: 0 8px 28px -6px rgba(0,0,0,.55); }
@@ -609,6 +685,30 @@ export class Walkthrough {
       .wt-tooltip button.wt-secondary { background:#e5e7eb; color:#111827; }
       .wt-tooltip button.wt-secondary:hover { background:#d1d5db; }
     }
+    `;
+	}
+
+	/**
+	 * Token-based stylesheet for the `shadcn` theme. Colors reference shadcn/ui design
+	 * tokens via CSS variables (see {@link tokenColor}), so they inherit the app's active
+	 * light/dark theme and are never subject to Tailwind's JIT purge.
+	 */
+	private generateShadcnStyles(): string {
+		const popover = this.tokenColor("popover");
+		const popoverFg = this.tokenColor("popoverForeground");
+		const border = this.tokenColor("border");
+		const primary = this.tokenColor("primary");
+		const primaryFg = this.tokenColor("primaryForeground");
+		return `
+    .wt-root { font-family: inherit; }
+    .wt-tooltip { background:${popover}; color:${popoverFg}; border:1px solid ${border}; border-radius:10px; padding:16px 18px; box-shadow:0 8px 28px -6px rgba(0,0,0,.45); }
+    .wt-tooltip h3 { margin:0 0 4px; font-size:16px; font-weight:600; }
+    .wt-tooltip .wt-content { font-size:14px; line-height:1.4; }
+    .wt-tooltip .wt-nav { display:flex; gap:8px; justify-content:flex-end; }
+    .wt-tooltip button { all:unset; font:inherit; background:${primary}; color:${primaryFg}; padding:6px 14px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:500; }
+    .wt-tooltip button:hover { filter:brightness(0.95); }
+    .wt-tooltip button.wt-secondary { background:transparent; color:${popoverFg}; border:1px solid ${border}; }
+    .wt-tooltip button.wt-secondary:hover { background:${border}; }
     `;
 	}
 
@@ -903,6 +1003,7 @@ export class Walkthrough {
 		recordDebug("walkthrough", "cleanup", this.opts.tourId || "<anon>", {
 			index: this.index,
 		});
+		__unregisterActive(this);
 	}
 
 	// Persistence helpers
@@ -965,6 +1066,94 @@ export class Walkthrough {
 				const key = this.progressKey();
 				if (key) localStorage.removeItem(key);
 			} catch {}
+		}
+	}
+
+	/** Current 0-based step index (-1 before the first step is shown). */
+	getCurrentIndex(): number {
+		return this.index;
+	}
+
+	/** Whether the walkthrough is currently active (overlay mounted). */
+	isActive(): boolean {
+		return this.active;
+	}
+
+	/**
+	 * Produce a lightweight snapshot of the instance's live state. Intended for
+	 * inspection tooling (e.g. the dev panel) — `options` is a shallow readonly copy;
+	 * mutate via {@link updateOptions} instead.
+	 */
+	getSnapshot(): ActiveTourSnapshot {
+		return {
+			id: this.opts.tourId,
+			index: this.index,
+			total: this.steps.length,
+			active: this.active,
+			options: { ...this.opts } as Readonly<WalkthroughOptions>,
+			steps: this.steps.map((s) => ({ selector: s.selector, title: s.title })),
+		};
+	}
+
+	/**
+	 * Merge new options into the instance. If the walkthrough is currently active the
+	 * overlay is rebuilt so visual changes (theme, backdrop, z-index, class overrides,
+	 * advance-click wiring, …) apply immediately. If inactive the values are stored and
+	 * take effect on the next {@link start}.
+	 *
+	 * Numeric polling fields are re-clamped exactly as in the constructor to avoid
+	 * regressions (e.g. a negative `stepWaitMs` or a zero poll interval tight loop).
+	 */
+	updateOptions(partial: Partial<WalkthroughOptions>) {
+		const themeChanged =
+			partial.theme !== undefined && partial.theme !== this.opts.theme;
+		const clean: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(partial)) {
+			if (v !== undefined) clean[k] = v;
+		}
+		this.opts = {
+			...this.opts,
+			...(clean as Partial<InternalResolvedOptions>),
+		};
+		// Re-apply constructor clamping.
+		this.opts.stepWaitMs = Math.max(0, this.opts.stepWaitMs);
+		this.opts.stepPollIntervalMs = Math.max(0, this.opts.stepPollIntervalMs);
+		recordDebug("walkthrough", "update-options", this.opts.tourId || "<anon>", {
+			keys: Object.keys(clean),
+			themeChanged,
+		});
+		if (!this.active || !this.hasDOM()) {
+			__emitActive();
+			return;
+		}
+		this.rebuildDom(themeChanged);
+		__emitActive();
+	}
+
+	/**
+	 * Tear down and rebuild the overlay DOM for the current step. Used by
+	 * {@link updateOptions} to apply option changes to a running tour. Preserves the
+	 * active step, its resolved element, and progress. Global listeners (resize/scroll/
+	 * keydown) attached in {@link start} are left intact; only overlay-scoped DOM and
+	 * its listeners (focus trap, overlay/target click) are rebuilt.
+	 */
+	private rebuildDom(themeChanged: boolean) {
+		if (!this.hasDOM()) return;
+		const step = this.index >= 0 ? this.steps[this.index] : undefined;
+		this.teardownFocusTrap();
+		if (this.root?.parentNode) this.root.parentNode.removeChild(this.root);
+		// Drop injected default-theme stylesheet when leaving the default theme so a
+		// re-entry (or a switch back) re-injects a fresh one.
+		if (themeChanged) {
+			const styleEl = document.getElementById("__walkthrough_styles");
+			if (styleEl?.parentNode) styleEl.parentNode.removeChild(styleEl);
+		}
+		// Reset so buildDom's idempotency guard allows a fresh build.
+		this.root = undefined as unknown as HTMLElement;
+		this.buildDom();
+		if (step?._el) {
+			this.renderStep(step);
+			this.reposition();
 		}
 	}
 }
